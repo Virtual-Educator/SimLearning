@@ -28,3 +28,14 @@
 6. **Attempt event log**
    - The attempt log utility exposes `logEvent(type, payload?)` and stores events in memory.
    - Scene and tools actions append events for: `grid_toggled`, `pin_mode_toggled`, `pin_added`, `pin_removed`, `view_reset`, `zoom_changed`, and `pan_changed`.
+
+7. **Authentication flow**
+   - Visiting `/player`, `/instructor`, or `/admin` when not signed in redirects to the `/login` page.
+   - Submitting valid Supabase email/password credentials on `/login` signs the user in and navigates to `/player` while preserving the existing simulation UI behavior.
+   - The TopBar shows a "Sign out" control when authenticated; clicking it ends the Supabase session and returns the user to the login screen.
+
+8. **Role-based routing**
+   - After login, the app loads (or creates) a `profiles` row for the authenticated user. Missing rows are inserted with the `student` role.
+   - `/player` is accessible to any authenticated user.
+   - `/instructor` is only accessible to users with role `instructor` or `admin`; other authenticated users are redirected back to `/player`.
+   - `/admin` is only accessible to users with role `admin`; other authenticated users are redirected back to `/player`.
