@@ -103,7 +103,7 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
   const sceneImageSrc = useMemo(() => {
     if (!manifest) return '';
     const basePath = `/simulations/${manifest.id}/`;
-    return `${basePath}${manifest.scene.src.replace(/^\\//, '')}`;
+    return `${basePath}${manifest.scene.src.replace(/^\/+/, '')}`;
   }, [manifest]);
 
   const toggleButtonLabel = `${isPanelCollapsed ? 'Expand' : 'Collapse'} utility panel (${TOGGLE_SHORTCUT})`;
