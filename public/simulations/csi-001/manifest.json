@@ -1,0 +1,31 @@
+{
+  "id": "csi-001",
+  "version": "1.0.0",
+  "title": "Crime Scene Observation",
+  "description": "Identify unmarked items and propose next actions.",
+  "scene": {
+    "type": "image",
+    "src": "assets/scene.jpg",
+    "alt": "Crime scene image"
+  },
+  "task": {
+    "prompt": "Identify three unmarked items. For each: what you saw, where it is, why it matters, and what you would do next.",
+    "checklist": [
+      "3 items minimum",
+      "Location references (pins or grid)",
+      "Relevance and next action"
+    ]
+  },
+  "tools": {
+    "pins": true,
+    "grid": true
+  },
+  "response": {
+    "mode": "voice_plus_transcript",
+    "allow_text_only": true,
+    "max_record_seconds": 180,
+    "min_transcript_chars": 40,
+    "min_pins": 0
+  },
+  "resources": []
+}
