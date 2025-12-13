@@ -11,7 +11,9 @@
 
 3. **Layout and controls**
    - The UI displays a two-pane layout: Scene on the left and Utility panel on the right.
-   - The Utility panel can be collapsed or expanded using the button in the header or the `Ctrl+Shift+U` keyboard shortcut. The chosen state persists after a refresh (localStorage).
+   - A bottom action bar spans the width of the app, showing a Draft status pill and disabled buttons for Save draft, Download attempt, and Submit.
+   - The Utility panel includes Task, Tools, and Response tabs (with other placeholder tabs) and can be collapsed or expanded using the button in the header or the `Ctrl+Shift+U` keyboard shortcut. The chosen state persists after a refresh (localStorage).
+   - When the Utility panel is collapsed, a visible handle remains to reopen it.
 
 4. **Scene interactions (image-based)**
    - The Scene area uses the ImageScene component to display the manifest image.
