@@ -16,7 +16,7 @@ export type SimulationVersion = {
   simulation_id: string;
   version: string;
   status: SimulationVersionStatus;
-  manifest_json: unknown;
+  manifest: unknown;
   created_at?: string;
   published_at?: string | null;
 };
@@ -53,7 +53,7 @@ export async function fetchSimulationWithVersions(simulationId: string) {
     .from('simulations')
     .select(
       `id, title, slug, description, created_at, updated_at,
-       simulation_versions(id, simulation_id, version, status, manifest_json, created_at, published_at)`
+       simulation_versions(id, simulation_id, version, status, manifest, created_at, published_at)`
     )
     .eq('id', simulationId)
     .single();
@@ -61,12 +61,12 @@ export async function fetchSimulationWithVersions(simulationId: string) {
 
 export async function createSimulationVersion(
   simulationId: string,
-  input: { version: string; manifest_json: unknown }
+  input: { version: string; manifest: unknown }
 ) {
   return supabase
     .from('simulation_versions')
     .insert({ ...input, simulation_id: simulationId, status: 'draft' })
-    .select('id, simulation_id, version, status, manifest_json, created_at, published_at')
+    .select('id, simulation_id, version, status, manifest, created_at, published_at')
     .single();
 }
 
@@ -87,14 +87,14 @@ export async function publishSimulationVersion(simulationId: string, versionId: 
     .from('simulation_versions')
     .update({ status: 'published', published_at: now })
     .eq('id', versionId)
-    .select('id, simulation_id, version, status, manifest_json, created_at, published_at')
+    .select('id, simulation_id, version, status, manifest, created_at, published_at')
     .single();
 }
 
 export async function fetchPublishedSimulationVersions() {
   return supabase
     .from('simulation_versions')
-    .select('id, simulation_id, version, status, manifest_json, created_at, published_at, simulations (id, title, slug, description)')
+    .select('id, simulation_id, version, status, manifest, created_at, published_at, simulations (id, title, slug, description)')
     .eq('status', 'published')
     .order('created_at', { ascending: false });
 }
@@ -103,7 +103,7 @@ export async function fetchPublishedSimulationVersionBySimulationId(simulationId
   return supabase
     .from('simulation_versions')
     .select(
-      'id, simulation_id, version, status, manifest_json, created_at, published_at, simulations (id, title, slug, description)'
+      'id, simulation_id, version, status, manifest, created_at, published_at, simulations (id, title, slug, description)'
     )
     .eq('simulation_id', simulationId)
     .eq('status', 'published')

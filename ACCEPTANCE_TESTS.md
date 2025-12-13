@@ -6,7 +6,7 @@
 
 2. **Published manifest loading**
    - Navigating to `/player/simulations/:simulationId` loads the latest published `simulation_versions` row for that simulation.
-   - The page reads `manifest_json` from that published version and passes it into the player UI. When present, the top bar shows the manifest title and description, the scene image renders in the left pane, and the Task tab shows the prompt plus checklist items.
+   - The page reads the `manifest` JSON from that published version and passes it into the player UI. When present, the top bar shows the manifest title and description, the scene image renders in the left pane, and the Task tab shows the prompt plus checklist items.
    - If no published version exists or the manifest JSON is invalid/missing required fields, a user-friendly error message appears in the scene area and Utility panel instead of breaking the app.
 
 3. **Layout and controls**
