@@ -5,9 +5,16 @@ interface TopBarProps {
   description: string;
   onTogglePanel: () => void;
   toggleLabel: string;
+  onSignOut?: () => Promise<void>;
 }
 
-export function TopBar({ title, description, onTogglePanel, toggleLabel }: TopBarProps) {
+export function TopBar({ title, description, onTogglePanel, toggleLabel, onSignOut }: TopBarProps) {
+  const handleSignOut = async () => {
+    if (onSignOut) {
+      await onSignOut();
+    }
+  };
+
   return (
     <header className="topbar">
       <div className="topbar__content">
@@ -21,6 +28,11 @@ export function TopBar({ title, description, onTogglePanel, toggleLabel }: TopBa
         <button className="toggle-button" onClick={onTogglePanel}>
           {toggleLabel}
         </button>
+        {onSignOut && (
+          <button className="toggle-button" onClick={handleSignOut}>
+            Sign out
+          </button>
+        )}
       </div>
     </header>
   );
