@@ -12,8 +12,9 @@ import { supabase } from '../lib/supabaseClient';
 export type UserRole = 'student' | 'instructor' | 'admin';
 
 export type UserProfile = {
-  id: string;
+  user_id: string;
   role: UserRole;
+  display_name: string | null;
 };
 
 interface AuthContextValue {
@@ -30,16 +31,16 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 async function fetchOrCreateProfile(userId: string): Promise<UserProfile> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, role')
-    .eq('id', userId)
+    .select('user_id, role, display_name')
+    .eq('user_id', userId)
     .single();
 
   if (error) {
     if (error.code === 'PGRST116') {
       const { data: newProfile, error: insertError } = await supabase
         .from('profiles')
-        .insert({ id: userId, role: 'student' })
-        .select('id, role')
+        .insert({ user_id: userId, role: 'student' })
+        .select('user_id, role, display_name')
         .single();
 
       if (insertError) {
