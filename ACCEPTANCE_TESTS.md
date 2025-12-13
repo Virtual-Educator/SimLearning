@@ -31,7 +31,10 @@
 
 7. **Authentication flow**
    - Visiting `/player`, `/instructor`, or `/admin` when not signed in redirects to the `/login` page.
-   - Submitting valid Supabase email/password credentials on `/login` signs the user in and navigates to `/player` while preserving the existing simulation UI behavior.
+   - Submitting valid Supabase email/password credentials on `/login` signs the user in and navigates to the appropriate landing page for their role while preserving the existing simulation UI behavior.
+   - Admin users land on `/admin` after login.
+   - Instructor users land on `/instructor` after login.
+   - Student users land on `/player` after login.
    - The TopBar shows a "Sign out" control when authenticated; clicking it ends the Supabase session and returns the user to the login screen.
 
 8. **Role-based routing**

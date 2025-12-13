@@ -7,6 +7,7 @@ import { AdminPage } from './pages/AdminPage';
 import { AdminSimulationDetailPage } from './pages/AdminSimulationDetailPage';
 import { PlayerSimulationPage } from './pages/PlayerSimulationPage';
 import { AuthProvider, useAuth, type UserRole } from './context/AuthContext';
+import { landingPathForRole } from './lib/routing';
 
 function LoadingScreen() {
   return (
@@ -48,16 +49,35 @@ function ProtectedRoute({
   if (allowedRoles) {
     if (!profile) return <LoadingScreen />;
     if (!allowedRoles.includes(profile.role)) {
-      return <Navigate to="/player" replace />;
+      return <Navigate to={landingPathForRole(profile.role)} replace />;
     }
   }
 
   return children;
 }
 
-function AppRoutes() {
-  const { session } = useAuth();
+function RootRedirect() {
+  const { session, profile, loadingAuth, loadingProfile } = useAuth();
 
+  if (loadingAuth || loadingProfile) return <LoadingScreen />;
+  if (!session) return <Navigate to="/login" replace />;
+  if (!profile) return <LoadingScreen />;
+
+  return <Navigate to={landingPathForRole(profile.role)} replace />;
+}
+
+function LoginRoute() {
+  const { session, profile, loadingAuth, loadingProfile } = useAuth();
+
+  if (loadingAuth || loadingProfile) return <LoadingScreen />;
+  if (session && profile) {
+    return <Navigate to={landingPathForRole(profile.role)} replace />;
+  }
+
+  return <LoginPage />;
+}
+
+function AppRoutes() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
   };
@@ -65,8 +85,8 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to={session ? '/player' : '/login'} replace />} />
-        <Route path="/login" element={<LoginPage isAuthenticated={Boolean(session)} />} />
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/login" element={<LoginRoute />} />
         <Route
           path="/player"
           element={
@@ -107,7 +127,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to={session ? '/player' : '/login'} replace />} />
+        <Route path="*" element={<RootRedirect />} />
       </Routes>
     </BrowserRouter>
   );

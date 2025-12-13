@@ -1,23 +1,11 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { FormEvent, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-interface LoginPageProps {
-  isAuthenticated: boolean;
-}
-
-export function LoginPage({ isAuthenticated }: LoginPageProps) {
-  const navigate = useNavigate();
+export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/player', { replace: true });
-    }
-  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -31,8 +19,6 @@ export function LoginPage({ isAuthenticated }: LoginPageProps) {
 
     if (signInError) {
       setError(signInError.message);
-    } else {
-      navigate('/player', { replace: true });
     }
 
     setIsSubmitting(false);
