@@ -275,4 +275,141 @@ with check (public.is_admin());
 
 -- simulations and versions
 drop policy if exists "simulations read all" on public.simulations;
-create poli
+create policy "simulations read all"
+on public.simulations for select
+using (true);
+
+drop policy if exists "simulations admin write" on public.simulations;
+create policy "simulations admin write"
+on public.simulations for all
+using (public.is_admin())
+with check (public.is_admin());
+
+-- versions: anyone can read published; admin can read all and write
+drop policy if exists "sim_versions read published" on public.simulation_versions;
+create policy "sim_versions read published"
+on public.simulation_versions for select
+using (status = 'published' or public.is_admin());
+
+drop policy if exists "sim_versions admin write" on public.simulation_versions;
+create policy "sim_versions admin write"
+on public.simulation_versions for all
+using (public.is_admin())
+with check (public.is_admin());
+
+-- course_simulations: students/instructors can read if in the course; admin writes
+drop policy if exists "course_simulations read membership" on public.course_simulations;
+create policy "course_simulations read membership"
+on public.course_simulations for select
+using (
+  public.is_admin()
+  or exists (select 1 from public.course_instructors ci where ci.course_id = course_simulations.course_id and ci.instructor_id = auth.uid())
+  or exists (select 1 from public.course_enrollments ce where ce.course_id = course_simulations.course_id and ce.student_id = auth.uid())
+);
+
+drop policy if exists "course_simulations admin write" on public.course_simulations;
+create policy "course_simulations admin write"
+on public.course_simulations for all
+using (public.is_admin())
+with check (public.is_admin());
+
+-- attempts: students see their own; instructors see attempts for courses they teach; admin sees all
+drop policy if exists "attempts read membership" on public.attempts;
+create policy "attempts read membership"
+on public.attempts for select
+using (
+  public.is_admin()
+  or student_id = auth.uid()
+  or exists (select 1 from public.course_instructors ci where ci.course_id = attempts.course_id and ci.instructor_id = auth.uid())
+);
+
+drop policy if exists "attempts student insert" on public.attempts;
+create policy "attempts student insert"
+on public.attempts for insert
+with check (
+  student_id = auth.uid()
+  and exists (select 1 from public.course_enrollments ce where ce.course_id = attempts.course_id and ce.student_id = auth.uid())
+);
+
+drop policy if exists "attempts student update own draft" on public.attempts;
+create policy "attempts student update own draft"
+on public.attempts for update
+using (student_id = auth.uid() and status = 'draft')
+with check (student_id = auth.uid() and status = 'draft');
+
+drop policy if exists "attempts instructor grade" on public.attempts;
+create policy "attempts instructor grade"
+on public.attempts for update
+using (
+  public.is_admin()
+  or exists (select 1 from public.course_instructors ci where ci.course_id = attempts.course_id and ci.instructor_id = auth.uid())
+)
+with check (true);
+
+-- attempt_events: read same as attempts; insert allowed for attempt owner while draft
+drop policy if exists "attempt_events read membership" on public.attempt_events;
+create policy "attempt_events read membership"
+on public.attempt_events for select
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.attempts a
+    where a.id = attempt_events.attempt_id
+      and (
+        a.student_id = auth.uid()
+        or exists (select 1 from public.course_instructors ci where ci.course_id = a.course_id and ci.instructor_id = auth.uid())
+      )
+  )
+);
+
+drop policy if exists "attempt_events insert by student draft" on public.attempt_events;
+create policy "attempt_events insert by student draft"
+on public.attempt_events for insert
+with check (
+  exists (
+    select 1 from public.attempts a
+    where a.id = attempt_events.attempt_id
+      and a.student_id = auth.uid()
+      and a.status = 'draft'
+  )
+);
+
+-- feedback: instructors/admin can write for attempts they can see; students can read for their attempts
+drop policy if exists "feedback read membership" on public.attempt_feedback;
+create policy "feedback read membership"
+on public.attempt_feedback for select
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.attempts a
+    where a.id = attempt_feedback.attempt_id
+      and (
+        a.student_id = auth.uid()
+        or exists (select 1 from public.course_instructors ci where ci.course_id = a.course_id and ci.instructor_id = auth.uid())
+      )
+  )
+);
+
+drop policy if exists "feedback write instructor" on public.attempt_feedback;
+create policy "feedback write instructor"
+on public.attempt_feedback for insert
+with check (
+  public.is_admin()
+  or (
+    instructor_id = auth.uid()
+    and exists (
+      select 1 from public.attempts a
+      where a.id = attempt_feedback.attempt_id
+        and exists (select 1 from public.course_instructors ci where ci.course_id = a.course_id and ci.instructor_id = auth.uid())
+    )
+  )
+);
+
+drop policy if exists "feedback update instructor" on public.attempt_feedback;
+create policy "feedback update instructor"
+on public.attempt_feedback for update
+using (
+  public.is_admin()
+  or instructor_id = auth.uid()
+)
+with check (public.is_admin() or instructor_id = auth.uid());
