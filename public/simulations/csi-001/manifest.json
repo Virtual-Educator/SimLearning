@@ -5,8 +5,8 @@
   "description": "Identify unmarked items and propose next actions.",
   "scene": {
     "type": "image",
-    "src": "assets/scene.jpg",
-    "alt": "Crime scene image"
+    "src": "assets/scene.svg",
+    "alt": "Stylized illustration of a crime scene layout"
   },
   "task": {
     "prompt": "Identify three unmarked items. For each: what you saw, where it is, why it matters, and what you would do next.",
