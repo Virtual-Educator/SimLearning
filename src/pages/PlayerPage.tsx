@@ -5,6 +5,10 @@ import { SceneFrame } from '../components/SceneFrame';
 import { TopBar } from '../components/TopBar';
 import { UtilityPanel, UtilityTab } from '../components/UtilityPanel';
 import { logEvent } from '../sim/attempt';
+import {
+  fetchPublishedSimulationVersions,
+  type PublishedSimulationVersion,
+} from '../lib/api';
 
 const MANIFEST_PATH = '/simulations/csi-001/manifest.json';
 const PANEL_STORAGE_KEY = 'simlearning-utility-collapsed';
@@ -51,6 +55,9 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
   const [showGrid, setShowGrid] = useState(false);
   const [pinMode, setPinMode] = useState(false);
   const [pins, setPins] = useState<PinLocation[]>([]);
+  const [publishedSimulations, setPublishedSimulations] = useState<PublishedSimulationVersion[]>([]);
+  const [publishedError, setPublishedError] = useState<string | null>(null);
+  const [loadingPublished, setLoadingPublished] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,6 +88,22 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
     loadManifest();
 
     return () => controller.abort();
+  }, []);
+
+  const loadPublishedSimulations = async () => {
+    setLoadingPublished(true);
+    setPublishedError(null);
+    const { data, error } = await fetchPublishedSimulationVersions();
+    if (error) {
+      setPublishedError('Unable to load published simulations.');
+    } else {
+      setPublishedSimulations(data ?? []);
+    }
+    setLoadingPublished(false);
+  };
+
+  useEffect(() => {
+    loadPublishedSimulations();
   }, []);
 
   useEffect(() => {
@@ -158,6 +181,66 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
         toggleLabel={toggleButtonLabel}
         onSignOut={onSignOut}
       />
+
+      <section style={{ padding: '16px' }}>
+        <div className="card" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <h2 style={{ margin: 0 }}>Published simulations</h2>
+            <button className="form__submit" onClick={loadPublishedSimulations} disabled={loadingPublished}>
+              Refresh
+            </button>
+          </div>
+          {loadingPublished && <p>Loading…</p>}
+          {publishedError && <div className="form__error">{publishedError}</div>}
+          {!loadingPublished && !publishedError && publishedSimulations.length === 0 && (
+            <p style={{ marginBottom: 0 }}>No published simulations yet.</p>
+          )}
+          {!loadingPublished && !publishedError && publishedSimulations.length > 0 && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 16,
+                marginTop: 12,
+              }}
+            >
+              {publishedSimulations.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 12,
+                    padding: 16,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    background: '#fff',
+                  }}
+                >
+                  <div>
+                    <p style={{ margin: '0 0 4px', color: '#475569', fontSize: 14 }}>Version {item.version}</p>
+                    <h3 style={{ margin: 0 }}>{item.simulations.title}</h3>
+                  </div>
+                  <p style={{ margin: 0, color: '#475569' }}>
+                    {item.simulations.description || 'No description provided.'}
+                  </p>
+                  <div style={{ marginTop: 'auto' }}>
+                    <button
+                      className="form__submit"
+                      type="button"
+                      onClick={() => {
+                        console.log('Open simulation', item.simulation_id);
+                      }}
+                    >
+                      Open
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       <main className={`workspace ${isPanelCollapsed ? 'workspace--panel-collapsed' : ''}`}>
         <SceneFrame isLoading={isLoading} error={error}>

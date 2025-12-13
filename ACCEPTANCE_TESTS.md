@@ -44,3 +44,14 @@
    - Once the role is set in `profiles` for a user, an admin can access `/admin`.
    - An authenticated student is blocked from `/admin`.
    - Navigating directly to `/admin` while authentication or profile data is still loading shows a loading state instead of redirecting.
+
+9. **Admin simulation library**
+   - `/admin` loads a list of simulations showing title, slug, and last update time along with a refresh control.
+   - The "New simulation" form on `/admin` validates slugs to lowercase letters, numbers, and hyphens, and inserts a new row into `public.simulations` with the provided title/slug/description.
+   - Clicking a simulation navigates to `/admin/simulations/:simulationId`, showing the simulation metadata and its versions.
+   - The detail page allows creating a new draft version with a version string and JSON-validated manifest saved to `public.simulation_versions`.
+   - Publishing a version marks it `published` with `published_at` set to now and archives any previously published version for the same simulation.
+
+10. **Player published simulations**
+    - `/player` shows a Published simulations section that queries published `simulation_versions` joined with their `simulations` metadata.
+    - Each published card shows the simulation title, description, version, and an "Open" action placeholder.
