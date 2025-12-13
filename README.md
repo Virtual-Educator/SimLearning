@@ -4,7 +4,7 @@ This repo contains a web-based simulation player that runs drop-in simulation pa
 
 MVP capabilities
 - Two-pane layout: scene on the left, utility panel on the right
-- Right utility panel can collapse and expand
+- Right utility panel can collapse and expand (Ctrl+Shift+U shortcut)
 - Image scene: pan, zoom, grid overlay, pins
 - Voice response: record audio, generate transcript, allow transcript edit
 - Text-only response option
