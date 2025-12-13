@@ -54,6 +54,7 @@
    - Clicking a simulation navigates to `/admin/simulations/:simulationId`, showing the simulation metadata and its versions.
    - The detail page allows creating a new draft version with a required version string and required JSON manifest saved to `public.simulation_versions`. Invalid JSON surfaces an inline validation error.
    - Publishing a version marks it `published` with `published_at` set to now and archives any previously published version for the same simulation. Version tables show loading/error/empty states.
+   - The latest published manifest block includes a "Copy JSON" control that copies the displayed manifest as pretty-printed JSON, briefly shows a "Copied" state, and surfaces an inline error if clipboard copy is unavailable.
 
 10. **Player published simulations**
     - `/player` lists published `simulation_versions` joined with their `simulations` metadata, showing each simulation's title, slug, description, and version alongside refresh/error/empty states.
