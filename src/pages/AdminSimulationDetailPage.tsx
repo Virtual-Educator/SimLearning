@@ -76,7 +76,7 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
     setIsSubmitting(true);
     const { data, error: submitError } = await createSimulationVersion(simulationId, {
       version: version.trim(),
-      manifest_json: parsedManifest,
+      manifest: parsedManifest,
     });
 
     if (submitError) {

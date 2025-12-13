@@ -119,7 +119,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
       return;
     }
 
-    const manifestJson = data.manifest_json as Partial<SimulationManifest> | null;
+    const manifestJson = data.manifest as Partial<SimulationManifest> | null;
 
     if (!manifestJson || typeof manifestJson !== 'object') {
       setError('Published manifest is invalid.');
