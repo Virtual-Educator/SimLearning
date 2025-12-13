@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   createSimulationVersion,
   fetchSimulationWithVersions,
+  fetchPublishedSimulationVersionBySimulationId,
   publishSimulationVersion,
   type SimulationWithVersions,
   type SimulationVersion,
@@ -20,6 +21,8 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
 
   const [version, setVersion] = useState('');
   const [manifestInput, setManifestInput] = useState('');
+  const [latestPublishedVersion, setLatestPublishedVersion] = useState<SimulationVersion | null>(null);
+  const [isManifestDirty, setIsManifestDirty] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
@@ -33,21 +36,61 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
     });
   }, [simulation]);
 
+  const latestPublishedManifestText = useMemo(() => {
+    if (!latestPublishedVersion?.manifest) return '';
+    try {
+      return JSON.stringify(latestPublishedVersion.manifest, null, 2);
+    } catch (err) {
+      return '';
+    }
+  }, [latestPublishedVersion]);
+
   useEffect(() => {
     if (!simulationId) return;
     loadSimulation(simulationId);
   }, [simulationId]);
 
+  useEffect(() => {
+    if (isManifestDirty) return;
+    if (!latestPublishedManifestText) return;
+    if (manifestInput.trim() !== '') return;
+
+    setManifestInput(latestPublishedManifestText);
+  }, [isManifestDirty, latestPublishedManifestText, manifestInput]);
+
   async function loadSimulation(id: string) {
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await fetchSimulationWithVersions(id);
-    if (fetchError) {
+    const [simulationResult, latestPublishedResult] = await Promise.all([
+      fetchSimulationWithVersions(id),
+      fetchPublishedSimulationVersionBySimulationId(id),
+    ]);
+
+    if (simulationResult.error) {
       setError('Unable to load simulation details.');
     } else {
-      setSimulation(data ?? null);
+      setSimulation(simulationResult.data ?? null);
     }
+
+    if (!latestPublishedResult.error) {
+      setLatestPublishedVersion(latestPublishedResult.data ?? null);
+    }
+
     setLoading(false);
+  }
+
+  function handleManifestChange(value: string) {
+    if (!isManifestDirty) {
+      setIsManifestDirty(true);
+    }
+    setManifestInput(value);
+  }
+
+  function handleCloneLatestManifest() {
+    if (!latestPublishedManifestText) return;
+    if (isManifestDirty) return;
+
+    setManifestInput(latestPublishedManifestText);
   }
 
   async function handleCreateVersion(event: FormEvent) {
@@ -89,6 +132,7 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
       );
       setVersion('');
       setManifestInput('');
+      setIsManifestDirty(false);
     }
 
     setIsSubmitting(false);
@@ -185,12 +229,23 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
               <textarea
                 className="form__input"
                 value={manifestInput}
-                onChange={(e) => setManifestInput(e.target.value)}
+                onChange={(e) => handleManifestChange(e.target.value)}
                 rows={8}
                 placeholder='{ "scene": {} }'
                 required
               />
             </label>
+
+            {latestPublishedManifestText && (
+              <button
+                className="form__submit"
+                type="button"
+                onClick={handleCloneLatestManifest}
+                style={{ alignSelf: 'flex-start' }}
+              >
+                Clone latest published
+              </button>
+            )}
 
             {formError && <div className="form__error">{formError}</div>}
 
@@ -199,6 +254,27 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
             </button>
           </form>
         </section>
+
+        {latestPublishedManifestText && (
+          <section style={{ marginTop: 24 }}>
+            <h3 style={{ marginBottom: 8 }}>Latest published manifest</h3>
+            <p style={{ marginTop: 0, color: '#475569' }}>
+              Pulled from the most recently published version.
+            </p>
+            <pre
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+                padding: 12,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {latestPublishedManifestText}
+            </pre>
+          </section>
+        )}
 
         <section style={{ marginTop: 32 }}>
           <h2 style={{ marginBottom: 12 }}>Versions</h2>
