@@ -98,3 +98,16 @@ export async function fetchPublishedSimulationVersions() {
     .eq('status', 'published')
     .order('created_at', { ascending: false });
 }
+
+export async function fetchPublishedSimulationVersionBySimulationId(simulationId: string) {
+  return supabase
+    .from('simulation_versions')
+    .select(
+      'id, simulation_id, version, status, manifest_json, created_at, published_at, simulations (id, title, slug, description)'
+    )
+    .eq('simulation_id', simulationId)
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+}

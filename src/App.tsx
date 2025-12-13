@@ -5,6 +5,7 @@ import { PlayerPage } from './pages/PlayerPage';
 import { InstructorPage } from './pages/InstructorPage';
 import { AdminPage } from './pages/AdminPage';
 import { AdminSimulationDetailPage } from './pages/AdminSimulationDetailPage';
+import { PlayerSimulationPage } from './pages/PlayerSimulationPage';
 import { AuthProvider, useAuth, type UserRole } from './context/AuthContext';
 
 function LoadingScreen() {
@@ -71,6 +72,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <PlayerPage onSignOut={handleSignOut} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/player/simulations/:simulationId"
+          element={
+            <ProtectedRoute>
+              <PlayerSimulationPage onSignOut={handleSignOut} />
             </ProtectedRoute>
           }
         />
