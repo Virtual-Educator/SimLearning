@@ -60,9 +60,14 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
       return;
     }
 
+    if (!manifestInput.trim()) {
+      setFormError('Manifest JSON is required and must be valid JSON.');
+      return;
+    }
+
     let parsedManifest: unknown;
     try {
-      parsedManifest = JSON.parse(manifestInput || '{}');
+      parsedManifest = JSON.parse(manifestInput);
     } catch (err) {
       setFormError('Manifest JSON must be valid JSON.');
       return;
@@ -183,6 +188,7 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
                 onChange={(e) => setManifestInput(e.target.value)}
                 rows={8}
                 placeholder='{ "scene": {} }'
+                required
               />
             </label>
 

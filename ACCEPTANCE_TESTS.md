@@ -4,10 +4,10 @@
    - Run `npm install` to install dependencies.
    - Run `npm run dev` and open the served URL. The console should not show runtime errors.
 
-2. **Manifest loading**
-   - The app requests `/simulations/csi-001/manifest.json` from the public folder at runtime.
-   - If the manifest loads, the top bar shows the manifest title and description, the scene image renders in the left pane, and the Task tab shows the prompt plus checklist items.
-   - If the manifest is missing or invalid, a user-friendly error message appears in both the scene area and Task tab instead of breaking the app.
+2. **Published manifest loading**
+   - Navigating to `/player/simulations/:simulationId` loads the latest published `simulation_versions` row for that simulation.
+   - The page reads `manifest_json` from that published version and passes it into the player UI. When present, the top bar shows the manifest title and description, the scene image renders in the left pane, and the Task tab shows the prompt plus checklist items.
+   - If no published version exists or the manifest JSON is invalid/missing required fields, a user-friendly error message appears in the scene area and Utility panel instead of breaking the app.
 
 3. **Layout and controls**
    - The UI displays a two-pane layout: Scene on the left and Utility panel on the right.
@@ -49,9 +49,9 @@
    - `/admin` loads a list of simulations showing title, slug, and last update time along with a refresh control.
    - The "New simulation" form on `/admin` validates slugs to lowercase letters, numbers, and hyphens, and inserts a new row into `public.simulations` with the provided title/slug/description.
    - Clicking a simulation navigates to `/admin/simulations/:simulationId`, showing the simulation metadata and its versions.
-   - The detail page allows creating a new draft version with a version string and JSON-validated manifest saved to `public.simulation_versions`.
-   - Publishing a version marks it `published` with `published_at` set to now and archives any previously published version for the same simulation.
+   - The detail page allows creating a new draft version with a required version string and required JSON manifest saved to `public.simulation_versions`. Invalid JSON surfaces an inline validation error.
+   - Publishing a version marks it `published` with `published_at` set to now and archives any previously published version for the same simulation. Version tables show loading/error/empty states.
 
 10. **Player published simulations**
-    - `/player` shows a Published simulations section that queries published `simulation_versions` joined with their `simulations` metadata.
-    - Each published card shows the simulation title, description, version, and an "Open" action placeholder.
+    - `/player` lists published `simulation_versions` joined with their `simulations` metadata, showing each simulation's title, slug, description, and version alongside refresh/error/empty states.
+    - Clicking "Open" on a published simulation navigates to `/player/simulations/:simulationId`, which loads and displays that simulation's published manifest.
