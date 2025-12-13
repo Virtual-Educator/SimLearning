@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   createSimulationVersion,
@@ -26,6 +26,9 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const copyTimeoutRef = useRef<number | null>(null);
 
   const sortedVersions: SimulationVersion[] = useMemo(() => {
     if (!simulation) return [];
@@ -57,6 +60,14 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
 
     setManifestInput(latestPublishedManifestText);
   }, [isManifestDirty, latestPublishedManifestText, manifestInput]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   async function loadSimulation(id: string) {
     setLoading(true);
@@ -91,6 +102,31 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
     if (isManifestDirty) return;
 
     setManifestInput(latestPublishedManifestText);
+  }
+
+  async function handleCopyLatestManifest() {
+    if (!latestPublishedManifestText) return;
+
+    if (!navigator?.clipboard?.writeText) {
+      setCopyError('Copy failed. Select and copy manually.');
+      setCopySuccess(false);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(latestPublishedManifestText);
+      setCopyError(null);
+      setCopySuccess(true);
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopySuccess(false);
+      }, 2000);
+    } catch (err) {
+      setCopyError('Copy failed. Select and copy manually.');
+      setCopySuccess(false);
+    }
   }
 
   async function handleCreateVersion(event: FormEvent) {
@@ -257,7 +293,15 @@ export function AdminSimulationDetailPage({ onSignOut }: AdminSimulationDetailPa
 
         {latestPublishedManifestText && (
           <section style={{ marginTop: 24 }}>
-            <h3 style={{ marginBottom: 8 }}>Latest published manifest</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <h3 style={{ marginBottom: 0 }}>Latest published manifest</h3>
+              <button className="form__submit" type="button" onClick={handleCopyLatestManifest}>
+                {copySuccess ? 'Copied' : 'Copy JSON'}
+              </button>
+            </div>
+            {copyError && (
+              <p style={{ margin: '0 0 8px', color: '#b91c1c' }}>Copy failed. Select and copy manually.</p>
+            )}
             <p style={{ marginTop: 0, color: '#475569' }}>
               Pulled from the most recently published version.
             </p>
