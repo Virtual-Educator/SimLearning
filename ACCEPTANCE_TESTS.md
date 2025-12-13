@@ -39,3 +39,6 @@
    - `/player` is accessible to any authenticated user.
    - `/instructor` is only accessible to users with role `instructor` or `admin`; other authenticated users are redirected back to `/player`.
    - `/admin` is only accessible to users with role `admin`; other authenticated users are redirected back to `/player`.
+   - An authenticated admin can reach `/admin`, and an authenticated instructor can reach `/instructor`.
+   - An authenticated student is blocked from `/admin`.
+   - Navigating directly to `/admin` while authentication or profile data is still loading shows a loading state instead of redirecting.

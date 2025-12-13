@@ -1,18 +1,10 @@
-import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabaseClient';
 import { LoginPage } from './pages/LoginPage';
 import { PlayerPage } from './pages/PlayerPage';
 import { InstructorPage } from './pages/InstructorPage';
 import { AdminPage } from './pages/AdminPage';
-
-export type UserRole = 'student' | 'instructor' | 'admin';
-
-export type UserProfile = {
-  id: string;
-  role: UserRole;
-};
+import { AuthProvider, useAuth, type UserRole } from './context/AuthContext';
 
 function LoadingScreen() {
   return (
@@ -24,21 +16,32 @@ function LoadingScreen() {
   );
 }
 
+function ErrorScreen({ message }: { message: string }) {
+  return (
+    <div className="page">
+      <div className="card">
+        <h2>Profile error</h2>
+        <p>{message}</p>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({
-  session,
-  profile,
-  isLoading,
   children,
   allowedRoles,
 }: {
-  session: Session | null;
-  profile: UserProfile | null;
-  isLoading: boolean;
   allowedRoles?: UserRole[];
   children: JSX.Element;
 }) {
-  if (isLoading) return <LoadingScreen />;
+  const { session, profile, loadingAuth, loadingProfile, profileError } = useAuth();
+
+  if (loadingAuth || loadingProfile) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" replace />;
+
+  if (profileError) {
+    return <ErrorScreen message={profileError} />;
+  }
 
   if (allowedRoles) {
     if (!profile) return <LoadingScreen />;
@@ -50,76 +53,11 @@ function ProtectedRoute({
   return children;
 }
 
-function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-
-  useEffect(() => {
-    async function initializeSession() {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Error fetching session', error);
-      }
-      setSession(data.session ?? null);
-      setIsAuthLoading(false);
-    }
-
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
-
-    initializeSession();
-
-    return () => {
-      subscription.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    async function loadProfile(userId: string) {
-      setIsAuthLoading(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, role')
-        .eq('id', userId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile', error);
-      }
-
-      if (!data) {
-        const { data: newProfile, error: insertError } = await supabase
-          .from('profiles')
-          .insert({ id: userId, role: 'student' })
-          .select('id, role')
-          .single();
-
-        if (insertError) {
-          console.error('Error creating profile', insertError);
-        } else {
-          setProfile(newProfile);
-        }
-      } else {
-        setProfile(data as UserProfile);
-      }
-      setIsAuthLoading(false);
-    }
-
-    if (!session?.user) {
-      setProfile(null);
-      setIsAuthLoading(false);
-      return;
-    }
-
-    loadProfile(session.user.id);
-  }, [session]);
+function AppRoutes() {
+  const { session } = useAuth();
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    setSession(null);
-    setProfile(null);
   };
 
   return (
@@ -130,7 +68,7 @@ function App() {
         <Route
           path="/player"
           element={
-            <ProtectedRoute session={session} profile={profile} isLoading={isAuthLoading}>
+            <ProtectedRoute>
               <PlayerPage onSignOut={handleSignOut} />
             </ProtectedRoute>
           }
@@ -138,12 +76,7 @@ function App() {
         <Route
           path="/instructor"
           element={
-            <ProtectedRoute
-              session={session}
-              profile={profile}
-              isLoading={isAuthLoading}
-              allowedRoles={['instructor', 'admin']}
-            >
+            <ProtectedRoute allowedRoles={['instructor', 'admin']}>
               <InstructorPage onSignOut={handleSignOut} />
             </ProtectedRoute>
           }
@@ -151,12 +84,7 @@ function App() {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute
-              session={session}
-              profile={profile}
-              isLoading={isAuthLoading}
-              allowedRoles={['admin']}
-            >
+            <ProtectedRoute allowedRoles={['admin']}>
               <AdminPage onSignOut={handleSignOut} />
             </ProtectedRoute>
           }
@@ -167,4 +95,10 @@ function App() {
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
+  );
+}
