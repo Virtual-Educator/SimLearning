@@ -4,6 +4,7 @@ export type AttemptEvent = {
     | 'pin_mode_toggled'
     | 'pin_added'
     | 'pin_removed'
+    | 'panel_toggled'
     | 'view_reset'
     | 'zoom_changed'
     | 'pan_changed'
@@ -26,4 +27,12 @@ export function logEvent(type: AttemptEvent['type'], payload?: AttemptEvent['pay
 
 export function getAttemptEvents() {
   return attemptEvents;
+}
+
+export function getAttemptEventsSince(startIndex: number) {
+  return attemptEvents.slice(startIndex);
+}
+
+export function resetAttemptEvents() {
+  attemptEvents.length = 0;
 }

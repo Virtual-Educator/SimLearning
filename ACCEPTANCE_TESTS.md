@@ -59,3 +59,8 @@
 10. **Player published simulations**
     - `/player` lists published `simulation_versions` joined with their `simulations` metadata, showing each simulation's title, slug, description, and version alongside refresh/error/empty states.
     - Clicking "Open" on a published simulation navigates to `/player/simulations/:simulationId`, which loads and displays that simulation's published manifest.
+11. **Player attempt persistence**
+    - Opening a published simulation version creates or resumes a draft attempt for the authenticated user, loading any saved responses and events before the UI becomes interactive. Loading errors surface the Supabase message.
+    - Saving a draft upserts the primary response text, stores new interaction events (grid toggles, pins, panel collapse) since the previous save, and shows a "Draft saved" confirmation with the updated timestamp.
+    - Submitting an attempt updates the attempt to `submitted`, records the submission time, and disables editing controls (response input, save/submit buttons, pins, and grid toggles).
+    - Downloading an attempt retrieves the attempt record plus its responses and events for the current attempt_id and saves them as `attempt.json` from the player UI.
