@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { fetchSubmittedAttempts, type AttemptWithSimulation } from '../lib/api';
 
 interface InstructorPageProps {
@@ -7,18 +8,26 @@ interface InstructorPageProps {
 }
 
 export function InstructorPage({ onSignOut }: InstructorPageProps) {
+  const { session } = useAuth();
   const [attempts, setAttempts] = useState<AttemptWithSimulation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAttempts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   async function loadAttempts() {
+    if (!session?.user) {
+      setError('You must be signed in to view submissions.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await fetchSubmittedAttempts();
+    const { data, error: fetchError } = await fetchSubmittedAttempts(session.user.id);
     if (fetchError) {
       setError('Unable to load submitted attempts.');
     } else {
@@ -72,6 +81,7 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
                     <th style={{ padding: '8px 6px' }}>Simulation</th>
                     <th style={{ padding: '8px 6px' }}>Version</th>
+                    <th style={{ padding: '8px 6px' }}>Status</th>
                     <th style={{ padding: '8px 6px' }}>Attempt</th>
                     <th style={{ padding: '8px 6px' }}>Student</th>
                     <th style={{ padding: '8px 6px' }}>Submitted</th>
@@ -99,6 +109,7 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                           </span>
                         </div>
                       </td>
+                      <td style={{ padding: '10px 6px', color: '#475569' }}>{attempt.status}</td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>#{attempt.attempt_no}</td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>{attempt.student_id}</td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>

@@ -343,7 +343,83 @@ export async function getStudentAssignedSimulations() {
   return { data: assignments, error: null };
 }
 
-export async function fetchSubmittedAttempts() {
+export async function fetchSubmittedAttempts(instructorId: string) {
+  const { data: instructorCourses, error: coursesError } = await supabase
+    .from('course_instructors')
+    .select('course_id')
+    .eq('instructor_id', instructorId);
+
+  if (coursesError) {
+    return { data: null, error: coursesError };
+  }
+
+  const courseIds = (instructorCourses ?? [])
+    .map((row) => row.course_id as string | null)
+    .filter((id): id is string => Boolean(id));
+
+  if (courseIds.length === 0) {
+    return { data: [], error: null };
+  }
+
+  const { data: courseSimulationRows, error: courseSimulationsError } = await supabase
+    .from('course_simulations')
+    .select(
+      `course_id, simulation_id, pinned_version_id,
+       pinned_version:simulation_versions!course_simulations_pinned_version_id_fkey (id, simulation_id, version, manifest)`
+    )
+    .in('course_id', courseIds);
+
+  if (courseSimulationsError) {
+    return { data: null, error: courseSimulationsError };
+  }
+
+  const simulationIdsNeedingLatest = new Set<string>();
+  const allowedVersions: { id: string; version?: string; manifest?: unknown }[] = [];
+
+  (courseSimulationRows ?? []).forEach((row) => {
+    if (row.pinned_version_id && row.pinned_version) {
+      const pinnedVersion = Array.isArray(row.pinned_version) ? row.pinned_version[0] : row.pinned_version;
+      if (pinnedVersion?.id) {
+        allowedVersions.push(pinnedVersion as { id: string; version?: string; manifest?: unknown });
+      }
+    } else if (row.simulation_id) {
+      simulationIdsNeedingLatest.add(row.simulation_id as string);
+    }
+  });
+
+  if (simulationIdsNeedingLatest.size > 0) {
+    const { data: latestVersions, error: latestError } = await supabase
+      .from('simulation_versions')
+      .select('id, simulation_id, version, manifest, published_at, created_at')
+      .eq('status', 'published')
+      .in('simulation_id', Array.from(simulationIdsNeedingLatest))
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
+
+    if (latestError) {
+      return { data: null, error: latestError };
+    }
+
+    const latestBySimulation: Record<string, { id: string; version?: string; manifest?: unknown }> = {};
+    (latestVersions ?? []).forEach((version) => {
+      if (!latestBySimulation[version.simulation_id]) {
+        latestBySimulation[version.simulation_id] = {
+          id: version.id,
+          version: version.version,
+          manifest: version.manifest,
+        };
+      }
+    });
+
+    allowedVersions.push(...Object.values(latestBySimulation));
+  }
+
+  const allowedVersionIds = Array.from(new Set(allowedVersions.map((v) => v.id)));
+
+  if (allowedVersionIds.length === 0) {
+    return { data: [], error: null };
+  }
+
   return supabase
     .from('attempts')
     .select(
@@ -354,6 +430,7 @@ export async function fetchSubmittedAttempts() {
        )`
     )
     .eq('status', 'submitted')
+    .in('simulation_version_id', allowedVersionIds)
     .order('submitted_at', { ascending: false });
 }
 

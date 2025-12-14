@@ -164,8 +164,8 @@ export function InstructorAttemptReviewPage() {
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 12, color: '#475569' }}>Offering</div>
-                <div style={{ fontWeight: 600 }}>Course —</div>
+                <div style={{ fontSize: 12, color: '#475569' }}>Simulation slug</div>
+                <div style={{ fontWeight: 600 }}>{simulationSlug}</div>
               </div>
             </section>
 
