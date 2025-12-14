@@ -21,6 +21,9 @@ interface UtilityPanelProps {
   pinMode: boolean;
   onGridToggle: () => void;
   onPinModeToggle: () => void;
+  responseText: string;
+  onResponseChange: (value: string) => void;
+  controlsDisabled?: boolean;
 }
 
 const TABS: { key: UtilityTab; label: string }[] = [
@@ -46,6 +49,9 @@ export function UtilityPanel({
   pinMode,
   onGridToggle,
   onPinModeToggle,
+  responseText,
+  onResponseChange,
+  controlsDisabled = false,
 }: UtilityPanelProps) {
   const renderTaskContent = () => {
     if (isLoading) return <div className="status">Loading task…</div>;
@@ -77,18 +83,51 @@ export function UtilityPanel({
       <div className="tools-tab">
         {gridAllowed && (
           <label className="tool-toggle">
-            <input type="checkbox" checked={showGrid} onChange={onGridToggle} />
+            <input
+              type="checkbox"
+              checked={showGrid}
+              onChange={onGridToggle}
+              disabled={controlsDisabled}
+            />
             Show grid overlay
           </label>
         )}
         {pinsAllowed && (
           <label className="tool-toggle">
-            <input type="checkbox" checked={pinMode} onChange={onPinModeToggle} />
+            <input
+              type="checkbox"
+              checked={pinMode}
+              onChange={onPinModeToggle}
+              disabled={controlsDisabled}
+            />
             Pin mode (click the scene to place pins)
           </label>
         )}
         {noToolsAvailable && <p className="subtle-text">No tools are available for this scene.</p>}
         <p className="utility-panel__placeholder">Tool outputs and controls will appear here as they are added.</p>
+      </div>
+    );
+  };
+
+  const renderResponseContent = () => {
+    if (isLoading) return <div className="status">Loading response…</div>;
+    if (error) return <div className="status status--error">{error}</div>;
+
+    return (
+      <div className="response-tab">
+        <label className="response-label" htmlFor="primary-response">
+          Primary response
+        </label>
+        <textarea
+          id="primary-response"
+          className="response-textarea"
+          value={responseText}
+          onChange={(event) => onResponseChange(event.target.value)}
+          placeholder="Capture your findings, reasoning, or next steps here."
+          rows={10}
+          disabled={controlsDisabled}
+        />
+        <p className="subtle-text">Responses save to your draft and are included in submissions.</p>
       </div>
     );
   };
@@ -104,7 +143,7 @@ export function UtilityPanel({
       case 'Tools':
         return renderToolsContent();
       case 'Response':
-        return renderPlaceholder('Responses will show here when available.');
+        return renderResponseContent();
       case 'Notes':
         return renderPlaceholder('Notes will be saved here for your reference.');
       case 'Resources':
