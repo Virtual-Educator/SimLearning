@@ -445,8 +445,6 @@ export async function fetchAttemptDetail(attemptId: string) {
          simulations (id, title, slug)
        )`
     )
-
-    )
     .eq('id', attemptId)
     .maybeSingle();
 }
