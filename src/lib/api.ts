@@ -246,6 +246,7 @@ export async function getStudentAssignedSimulations() {
            pinned_version_id,
            simulations (id, slug, title, description),
            pinned_version:simulation_versions!course_simulations_pinned_version_id_fkey (id, version, manifest, published_at, created_at)
+           )
        )`
     )
     .eq('student_id', studentId);
