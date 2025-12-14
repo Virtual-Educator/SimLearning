@@ -303,7 +303,8 @@ export async function getStudentAssignedSimulations() {
       `course_id,
        courses (
          id,
-         course_code,
+         code,
+         term,
          title,
          course_simulations (
            simulation_id,
@@ -330,7 +331,7 @@ export async function getStudentAssignedSimulations() {
   (enrollmentRows ?? []).forEach((row) => {
     const course = Array.isArray(row.courses) ? row.courses[0] : row.courses;
     const courseId = course?.id ?? row.course_id;
-    const courseCode = course?.course_code ?? '';
+    const courseCode = course?.code ?? '';
     const courseTitle = course?.title ?? null;
     const courseSimulations = course?.course_simulations ?? [];
     const normalizedCourseSimulations = Array.isArray(courseSimulations)
