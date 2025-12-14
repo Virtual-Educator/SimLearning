@@ -66,6 +66,11 @@ export function InstructorAttemptReviewPage() {
     const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
     const simulationRaw = simVersion?.simulations;
     const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
+    const normalizedAttempt: AttemptDetail = {
+      ...attemptData,
+      simulation_versions: simVersion ? { ...simVersion, simulations: simulation ?? null } : null,
+    };
+
     const courseRaw = attemptData.course;
     const course = Array.isArray(courseRaw) ? courseRaw[0] : courseRaw;
     const normalizedAttempt: AttemptDetail = {
@@ -83,6 +88,7 @@ export function InstructorAttemptReviewPage() {
             simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
           }
         : null,
+
     };
 
     setAttempt(normalizedAttempt);
@@ -133,8 +139,9 @@ export function InstructorAttemptReviewPage() {
   }
 
   const simulationTitle = attempt?.simulation_versions?.simulations?.title ?? 'Unknown simulation';
+  const simulationSlug = attempt?.simulation_versions?.simulations?.slug ?? '—';
   const version = attempt?.simulation_versions?.version ?? '—';
-  const courseLabel = attempt?.course?.code ?? 'Course';
+
 
   return (
     <div className="page">
@@ -148,7 +155,7 @@ export function InstructorAttemptReviewPage() {
             </p>
             <h1 style={{ margin: 0 }}>Attempt review</h1>
             <p style={{ margin: 0, color: '#475569' }}>
-              {simulationTitle} (v{version})
+              {simulationTitle} (v{version}) • {simulationSlug}
             </p>
           </div>
         </div>
@@ -178,8 +185,10 @@ export function InstructorAttemptReviewPage() {
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 12, color: '#475569' }}>Offering</div>
-                <div style={{ fontWeight: 600 }}>{courseLabel}</div>
+
+                <div style={{ fontSize: 12, color: '#475569' }}>Simulation slug</div>
+                <div style={{ fontWeight: 600 }}>{simulationSlug}</div>
+
               </div>
             </section>
 
