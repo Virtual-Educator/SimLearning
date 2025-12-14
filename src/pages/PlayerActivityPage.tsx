@@ -271,7 +271,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     const { data, error: fetchError } = await supabase
       .from('activities')
       .select(
-        'id, title, simulation_id, simulation_slug, simulation_title, simulation_description, simulation_version_id, simulation_version, manifest, course_code, course_term'
+        'id, title, simulation_id, simulation_slug, simulation_title, simulation_description, simulation_version_id, simulation_version, manifest'
       )
       .eq('id', activityId)
       .maybeSingle();
@@ -352,7 +352,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     setManifest(resolvedManifest);
     setActivityMeta({
       title: data.title,
-      course_label: data.course_term ?? data.course_code ?? 'Course',
+      course_label: 'Course',
       simulation_title: simulation?.title ?? 'Simulation',
       version: simVersion.version,
     });

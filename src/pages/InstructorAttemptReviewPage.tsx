@@ -65,8 +65,6 @@ export function InstructorAttemptReviewPage() {
     const activity = Array.isArray(attemptData.activities)
       ? attemptData.activities[0]
       : attemptData.activities;
-    const offering = activity?.course_offerings;
-    const course = offering?.courses;
     const simVersion = activity?.simulation_versions;
     const simulation = simVersion?.simulations;
     const normalizedAttempt: AttemptDetail = {
@@ -75,12 +73,6 @@ export function InstructorAttemptReviewPage() {
         ? {
             id: activity.id,
             title: activity.title,
-            course_offerings: offering
-              ? {
-                  offering_code: offering.offering_code,
-                  courses: Array.isArray(course) ? course[0] : course ?? null,
-                }
-              : null,
             simulation_versions: simVersion
               ? {
                   version: simVersion.version,
@@ -184,7 +176,7 @@ export function InstructorAttemptReviewPage() {
               </div>
               <div>
                 <div style={{ fontSize: 12, color: '#475569' }}>Offering</div>
-                <div style={{ fontWeight: 600 }}>{attempt.activities?.course_offerings?.offering_code ?? '—'}</div>
+                <div style={{ fontWeight: 600 }}>Course —</div>
               </div>
             </section>
 

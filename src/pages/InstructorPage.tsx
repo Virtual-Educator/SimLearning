@@ -24,12 +24,6 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
     } else {
       const normalizedAttempts = (data ?? []).map((row) => {
         const activity = Array.isArray(row.activities) ? row.activities[0] : row.activities;
-        const offeringRaw = activity?.course_offerings;
-        const offering = (Array.isArray(offeringRaw) ? offeringRaw[0] : offeringRaw) as any;
-        const courseRaw = offering?.courses;
-        const course = (Array.isArray(courseRaw) ? courseRaw[0] : courseRaw) as any;
-        const termRaw = offering?.terms;
-        const term = (Array.isArray(termRaw) ? termRaw[0] : termRaw) as any;
         const simVersionRaw = activity?.simulation_versions;
         const simVersion = (Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw) as any;
         const simulationRaw = simVersion?.simulations;
@@ -44,13 +38,6 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
             ? {
                 id: activity.id,
                 title: activity.title,
-                course_offerings: offering
-                  ? {
-                      offering_code: offering.offering_code,
-                      courses: Array.isArray(course) ? course[0] : course ?? null,
-                      terms: Array.isArray(term) ? term[0] : term ?? null,
-                    }
-                  : null,
                 simulation_versions: simVersion
                   ? {
                       version: simVersion.version,
@@ -121,9 +108,6 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                           <strong>{attempt.activities?.simulation_versions?.simulations?.title ?? 'Unknown simulation'}</strong>
                           <span style={{ color: '#475569', fontSize: 13 }}>
                             Version {attempt.activities?.simulation_versions?.version ?? '—'}
-                          </span>
-                          <span style={{ color: '#475569', fontSize: 13 }}>
-                            Offering {attempt.activities?.course_offerings?.offering_code ?? '—'}
                           </span>
                         </div>
                       </td>
