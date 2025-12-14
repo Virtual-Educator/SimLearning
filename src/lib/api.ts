@@ -29,24 +29,79 @@ export type PublishedSimulationVersion = SimulationVersion & {
   simulations: Simulation;
 };
 
-export type AttemptWithSimulation = {
+export type Course = {
   id: string;
+  course_code: string;
+  subject: string;
+  number: string;
+  title?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type Term = {
+  id: string;
+  term_code: string;
+  year?: number | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+};
+
+export type CourseOffering = {
+  id: string;
+  course_id: string;
+  term_id: string;
+  section: string;
+  offering_code: string;
+  created_at?: string;
+  updated_at?: string;
+  courses?: Course | null;
+  terms?: Term | null;
+};
+
+export type Activity = {
+  id: string;
+  offering_id: string;
+  simulation_version_id: string;
+  title: string;
+  opens_at: string | null;
+  due_at: string | null;
+  closed_at: string | null;
+  max_submissions: number | null;
+  allow_resubmissions: boolean;
+  course_offerings?: CourseOffering | null;
+  simulation_versions?: (SimulationVersion & { simulations?: Simulation | null }) | null;
+};
+
+export type AttemptWithActivity = {
+  id: string;
+  attempt_no: number;
   submitted_at: string | null;
-  user_id: string;
-  simulation_versions: {
-    version: string;
-    simulations: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
+  student_id: string;
+  activities: Pick<Activity, 'id' | 'title'> & {
+    course_offerings: (Pick<CourseOffering, 'offering_code'> & {
+      courses?: Pick<Course, 'course_code' | 'title'> | null;
+      terms?: Pick<Term, 'term_code'> | null;
+    }) | null;
+    simulation_versions: (Pick<SimulationVersion, 'version'> & {
+      simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
+    }) | null;
   } | null;
 };
 
 export type AttemptDetail = {
   id: string;
-  user_id: string;
+  student_id: string;
   status: string;
+  attempt_no: number;
   submitted_at: string | null;
-  simulation_versions: {
-    version: string;
-    simulations: Pick<Simulation, 'id' | 'title'> | null;
+  activities: Pick<Activity, 'id' | 'title'> & {
+    course_offerings: (Pick<CourseOffering, 'offering_code'> & {
+      courses?: Pick<Course, 'course_code' | 'title'> | null;
+    }) | null;
+    simulation_versions: (Pick<SimulationVersion, 'version'> & {
+      simulations?: Pick<Simulation, 'id' | 'title'> | null;
+    }) | null;
   } | null;
 };
 
@@ -89,6 +144,71 @@ export async function createSimulation(input: {
     .from('simulations')
     .insert({ ...input })
     .select('id, title, slug, description, created_at, updated_at')
+    .single();
+}
+
+export async function fetchCourses() {
+  return supabase
+    .from('courses')
+    .select('id, course_code, subject, number, title, created_at, updated_at')
+    .order('course_code', { ascending: true });
+}
+
+export async function createCourse(input: { course_code: string; subject: string; number: string; title?: string | null }) {
+  return supabase
+    .from('courses')
+    .insert({ ...input })
+    .select('id, course_code, subject, number, title, created_at, updated_at')
+    .single();
+}
+
+export async function fetchTerms() {
+  return supabase
+    .from('terms')
+    .select('id, term_code, year, starts_at, ends_at, created_at, updated_at')
+    .order('term_code', { ascending: true });
+}
+
+export async function createTerm(input: { term_code: string; year?: number | null; starts_at?: string | null; ends_at?: string | null }) {
+  return supabase
+    .from('terms')
+    .insert({ ...input })
+    .select('id, term_code, year, starts_at, ends_at, created_at, updated_at')
+    .single();
+}
+
+export async function fetchCourseOfferings() {
+  return supabase
+    .from('course_offerings')
+    .select(
+      `id, course_id, term_id, section, offering_code, created_at, updated_at,
+       courses (id, course_code, subject, number, title),
+       terms (id, term_code, year)`
+    )
+    .order('offering_code', { ascending: true });
+}
+
+export async function createCourseOffering(input: { course_id: string; term_id: string; section: string; offering_code: string }) {
+  return supabase
+    .from('course_offerings')
+    .insert({ ...input })
+    .select('id, course_id, term_id, section, offering_code, created_at, updated_at')
+    .single();
+}
+
+export async function createActivity(input: {
+  offering_id: string;
+  simulation_version_id: string;
+  title: string;
+  opens_at?: string | null;
+  due_at?: string | null;
+  max_submissions?: number | null;
+  allow_resubmissions?: boolean;
+}) {
+  return supabase
+    .from('activities')
+    .insert({ ...input })
+    .select('id, offering_id, simulation_version_id, title, opens_at, due_at, max_submissions, allow_resubmissions')
     .single();
 }
 
@@ -160,7 +280,12 @@ export async function fetchSubmittedAttempts() {
   return supabase
     .from('attempts')
     .select(
-      'id, submitted_at, user_id, simulation_versions (version, simulations (id, title, slug))'
+      `id, attempt_no, submitted_at, student_id,
+       activities (
+         id, title,
+         course_offerings (offering_code, courses (id, course_code, title)),
+         simulation_versions (version, simulations (id, title, slug))
+       )`
     )
     .eq('status', 'submitted')
     .order('submitted_at', { ascending: false });
@@ -169,7 +294,14 @@ export async function fetchSubmittedAttempts() {
 export async function fetchAttemptDetail(attemptId: string) {
   return supabase
     .from('attempts')
-    .select('id, user_id, status, submitted_at, simulation_versions (version, simulations (id, title))')
+    .select(
+      `id, student_id, status, attempt_no, submitted_at,
+       activities (
+         id, title,
+         course_offerings (offering_code, courses (id, course_code, title)),
+         simulation_versions (version, simulations (id, title))
+       )`
+    )
     .eq('id', attemptId)
     .maybeSingle();
 }

@@ -5,7 +5,7 @@ import { PlayerPage } from './pages/PlayerPage';
 import { InstructorPage } from './pages/InstructorPage';
 import { AdminPage } from './pages/AdminPage';
 import { AdminSimulationDetailPage } from './pages/AdminSimulationDetailPage';
-import { PlayerSimulationPage } from './pages/PlayerSimulationPage';
+import { PlayerActivityPage } from './pages/PlayerActivityPage';
 import { InstructorAttemptReviewPage } from './pages/InstructorAttemptReviewPage';
 import { AuthProvider, useAuth, type UserRole } from './context/AuthContext';
 import { landingPathForRole } from './lib/routing';
@@ -97,10 +97,10 @@ function AppRoutes() {
           }
         />
         <Route
-          path="/player/simulations/:simulationId"
+          path="/player/activities/:activityId"
           element={
             <ProtectedRoute>
-              <PlayerSimulationPage onSignOut={handleSignOut} />
+              <PlayerActivityPage onSignOut={handleSignOut} />
             </ProtectedRoute>
           }
         />

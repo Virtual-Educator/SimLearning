@@ -63,9 +63,10 @@ for each row execute function public.touch_updated_at();
 
 create table if not exists public.courses (
   id uuid primary key default gen_random_uuid(),
-  code text not null,
-  title text not null,
-  term text,
+  course_code text not null unique,          -- "PSY220"
+  subject text not null,                     -- "PSY"
+  number text not null,                      -- "220"
+  title text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -73,6 +74,36 @@ create table if not exists public.courses (
 drop trigger if exists trg_courses_touch on public.courses;
 create trigger trg_courses_touch
 before update on public.courses
+for each row execute function public.touch_updated_at();
+
+create table if not exists public.terms (
+  id uuid primary key default gen_random_uuid(),
+  term_code text not null unique,            -- "FA1", "SP2"
+  year int,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_terms_touch on public.terms;
+create trigger trg_terms_touch
+before update on public.terms
+for each row execute function public.touch_updated_at();
+
+create table if not exists public.course_offerings (
+  id uuid primary key default gen_random_uuid(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  term_id uuid not null references public.terms(id) on delete cascade,
+  section text not null,
+  offering_code text not null unique,        -- "PSY220_FA1_200"
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_course_offerings_touch on public.course_offerings;
+create trigger trg_course_offerings_touch
+before update on public.course_offerings
 for each row execute function public.touch_updated_at();
 
 create table if not exists public.course_instructors (
@@ -141,6 +172,26 @@ create table if not exists public.course_simulations (
   primary key (course_id, simulation_id)
 );
 
+create table if not exists public.activities (
+  id uuid primary key default gen_random_uuid(),
+  offering_id uuid not null references public.course_offerings(id) on delete cascade,
+  simulation_version_id uuid not null references public.simulation_versions(id) on delete restrict,
+  title text not null,
+  opens_at timestamptz,
+  due_at timestamptz,
+  closed_at timestamptz,
+  closed_by uuid references public.profiles(user_id),
+  max_submissions int,
+  allow_resubmissions boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_activities_touch on public.activities;
+create trigger trg_activities_touch
+before update on public.activities
+for each row execute function public.touch_updated_at();
+
 -- 4) Attempts and instructor feedback
 
 do $$ begin
@@ -151,10 +202,11 @@ end $$;
 
 create table if not exists public.attempts (
   id uuid primary key default gen_random_uuid(),
-  course_id uuid not null references public.courses(id) on delete cascade,
+  activity_id uuid not null references public.activities(id) on delete cascade,
   simulation_version_id uuid not null references public.simulation_versions(id) on delete restrict,
-  user_id uuid not null references public.profiles(user_id) on delete cascade,
+  student_id uuid not null references public.profiles(user_id) on delete cascade,
   status public.attempt_status not null default 'draft',
+  attempt_no int not null,
   started_at timestamptz not null default now(),
   submitted_at timestamptz,
   transcript text,
@@ -163,7 +215,8 @@ create table if not exists public.attempts (
   pins jsonb not null default '[]'::jsonb,
   audio_path text,                      -- Supabase Storage path, optional
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (activity_id, student_id, attempt_no)
 );
 
 drop trigger if exists trg_attempts_touch on public.attempts;
@@ -171,8 +224,34 @@ create trigger trg_attempts_touch
 before update on public.attempts
 for each row execute function public.touch_updated_at();
 
-create index if not exists idx_attempts_user on public.attempts(user_id);
-create index if not exists idx_attempts_course on public.attempts(course_id);
+create or replace function public.activity_is_open(activity_id uuid)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1
+    from public.activities a
+    where a.id = activity_is_open.activity_id
+      and (a.opens_at is null or a.opens_at <= now())
+      and (a.due_at is null or now() <= a.due_at)
+      and a.closed_at is null
+  );
+$$;
+
+create or replace function public.next_attempt_no(activity_id uuid, student_id uuid)
+returns int
+language sql
+stable
+as $$
+  select coalesce(max(attempt_no), 0) + 1
+  from public.attempts a
+  where a.activity_id = next_attempt_no.activity_id
+    and a.student_id = next_attempt_no.student_id;
+$$;
+
+create index if not exists idx_attempts_student on public.attempts(student_id);
+create index if not exists idx_attempts_activity on public.attempts(activity_id);
 create index if not exists idx_attempts_simver on public.attempts(simulation_version_id);
 
 create table if not exists public.attempt_events (
@@ -203,11 +282,14 @@ for each row execute function public.touch_updated_at();
 
 alter table public.profiles enable row level security;
 alter table public.courses enable row level security;
+alter table public.terms enable row level security;
+alter table public.course_offerings enable row level security;
 alter table public.course_instructors enable row level security;
 alter table public.course_enrollments enable row level security;
 alter table public.simulations enable row level security;
 alter table public.simulation_versions enable row level security;
 alter table public.course_simulations enable row level security;
+alter table public.activities enable row level security;
 alter table public.attempts enable row level security;
 alter table public.attempt_events enable row level security;
 alter table public.attempt_feedback enable row level security;
@@ -237,6 +319,32 @@ using (
 drop policy if exists "courses admin write" on public.courses;
 create policy "courses admin write"
 on public.courses for all
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "terms readable" on public.terms;
+create policy "terms readable"
+on public.terms for select
+using (auth.uid() is not null);
+
+drop policy if exists "terms admin write" on public.terms;
+create policy "terms admin write"
+on public.terms for all
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "course_offerings read membership" on public.course_offerings;
+create policy "course_offerings read membership"
+on public.course_offerings for select
+using (
+  public.is_admin()
+  or exists (select 1 from public.course_instructors ci where ci.course_id = course_offerings.course_id and ci.instructor_id = auth.uid())
+  or exists (select 1 from public.course_enrollments ce where ce.course_id = course_offerings.course_id and ce.student_id = auth.uid())
+);
+
+drop policy if exists "course_offerings admin write" on public.course_offerings;
+create policy "course_offerings admin write"
+on public.course_offerings for all
 using (public.is_admin())
 with check (public.is_admin());
 
@@ -311,36 +419,115 @@ on public.course_simulations for all
 using (public.is_admin())
 with check (public.is_admin());
 
+drop policy if exists "activities read membership" on public.activities;
+create policy "activities read membership"
+on public.activities for select
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.course_offerings co
+    join public.course_enrollments ce on ce.course_id = co.course_id
+    where co.id = activities.offering_id
+      and ce.student_id = auth.uid()
+  )
+  or exists (
+    select 1 from public.course_offerings co
+    join public.course_instructors ci on ci.course_id = co.course_id
+    where co.id = activities.offering_id
+      and ci.instructor_id = auth.uid()
+  )
+);
+
+drop policy if exists "activities manage instructors" on public.activities;
+create policy "activities manage instructors"
+on public.activities for all
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.course_offerings co
+    join public.course_instructors ci on ci.course_id = co.course_id
+    where co.id = activities.offering_id
+      and ci.instructor_id = auth.uid()
+  )
+)
+with check (
+  public.is_admin()
+  or exists (
+    select 1 from public.course_offerings co
+    join public.course_instructors ci on ci.course_id = co.course_id
+    where co.id = activities.offering_id
+      and ci.instructor_id = auth.uid()
+  )
+);
+
 -- attempts: students see their own; instructors see attempts for courses they teach; admin sees all
 drop policy if exists "attempts read membership" on public.attempts;
 create policy "attempts read membership"
 on public.attempts for select
 using (
   public.is_admin()
-  or user_id = auth.uid()
-  or exists (select 1 from public.course_instructors ci where ci.course_id = attempts.course_id and ci.instructor_id = auth.uid())
+  or student_id = auth.uid()
+  or exists (
+    select 1 from public.course_instructors ci
+    join public.activities a on a.id = attempts.activity_id
+    join public.course_offerings co on co.id = a.offering_id
+    where ci.course_id = co.course_id
+      and ci.instructor_id = auth.uid()
+  )
 );
 
 drop policy if exists "attempts student insert" on public.attempts;
 create policy "attempts student insert"
 on public.attempts for insert
 with check (
-  user_id = auth.uid()
-  and exists (select 1 from public.course_enrollments ce where ce.course_id = attempts.course_id and ce.student_id = auth.uid())
+  student_id = auth.uid()
+  and exists (
+    select 1 from public.activities a
+    join public.course_offerings co on co.id = a.offering_id
+    join public.course_enrollments ce on ce.course_id = co.course_id
+    where a.id = attempts.activity_id
+      and ce.student_id = auth.uid()
+  )
+  and public.activity_is_open(activity_id)
+  and (
+    exists (
+      select 1
+      from public.activities a
+      where a.id = attempts.activity_id
+        and (a.allow_resubmissions or not exists (
+          select 1 from public.attempts prev
+          where prev.activity_id = attempts.activity_id
+            and prev.student_id = auth.uid()
+        ))
+        and (a.max_submissions is null or public.next_attempt_no(attempts.activity_id, auth.uid()) <= a.max_submissions)
+    )
+  )
 );
 
 drop policy if exists "attempts student update own draft" on public.attempts;
 create policy "attempts student update own draft"
 on public.attempts for update
-using (user_id = auth.uid() and status = 'draft')
-with check (user_id = auth.uid() and status = 'draft');
+using (student_id = auth.uid())
+with check (
+  student_id = auth.uid()
+  and (
+    status = 'draft'
+    or (status = 'submitted' and public.activity_is_open(activity_id))
+  )
+);
 
 drop policy if exists "attempts instructor grade" on public.attempts;
 create policy "attempts instructor grade"
 on public.attempts for update
 using (
   public.is_admin()
-  or exists (select 1 from public.course_instructors ci where ci.course_id = attempts.course_id and ci.instructor_id = auth.uid())
+  or exists (
+    select 1 from public.course_instructors ci
+    join public.activities a on a.id = attempts.activity_id
+    join public.course_offerings co on co.id = a.offering_id
+    where ci.course_id = co.course_id
+      and ci.instructor_id = auth.uid()
+  )
 )
 with check (true);
 
@@ -354,8 +541,13 @@ using (
     select 1 from public.attempts a
     where a.id = attempt_events.attempt_id
       and (
-        a.user_id = auth.uid()
-        or exists (select 1 from public.course_instructors ci where ci.course_id = a.course_id and ci.instructor_id = auth.uid())
+        a.student_id = auth.uid()
+        or exists (
+          select 1 from public.course_instructors ci
+          join public.activities act on act.id = a.activity_id
+          join public.course_offerings co on co.id = act.offering_id
+          where ci.course_id = co.course_id and ci.instructor_id = auth.uid()
+        )
       )
   )
 );
@@ -367,7 +559,7 @@ with check (
   exists (
     select 1 from public.attempts a
     where a.id = attempt_events.attempt_id
-      and a.user_id = auth.uid()
+      and a.student_id = auth.uid()
       and a.status = 'draft'
   )
 );
@@ -382,7 +574,7 @@ using (
     select 1 from public.attempts a
     where a.id = attempt_feedback.attempt_id
       and (
-        a.user_id = auth.uid()
+        a.student_id = auth.uid()
         or public.is_instructor()
       )
   )
@@ -430,7 +622,7 @@ using (
     select 1 from public.attempts a
     where a.id = attempt_responses.attempt_id
       and (
-        a.user_id = auth.uid()
+        a.student_id = auth.uid()
         or (a.status = 'submitted' and public.is_instructor())
       )
   )
@@ -443,14 +635,14 @@ using (
   exists (
     select 1 from public.attempts a
     where a.id = attempt_responses.attempt_id
-      and a.user_id = auth.uid()
+      and a.student_id = auth.uid()
   )
 )
 with check (
   exists (
     select 1 from public.attempts a
     where a.id = attempt_responses.attempt_id
-      and a.user_id = auth.uid()
+      and a.student_id = auth.uid()
   )
 );
 

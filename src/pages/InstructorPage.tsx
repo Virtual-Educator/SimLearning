@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchSubmittedAttempts, type AttemptWithSimulation } from '../lib/api';
+import { fetchSubmittedAttempts, type AttemptWithActivity } from '../lib/api';
 
 interface InstructorPageProps {
   onSignOut: () => Promise<void>;
 }
 
 export function InstructorPage({ onSignOut }: InstructorPageProps) {
-  const [attempts, setAttempts] = useState<AttemptWithSimulation[]>([]);
+  const [attempts, setAttempts] = useState<AttemptWithActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,24 +23,43 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
       setError('Unable to load submitted attempts.');
     } else {
       const normalizedAttempts = (data ?? []).map((row) => {
-        const simVersion = Array.isArray(row.simulation_versions)
-          ? row.simulation_versions[0]
-          : row.simulation_versions;
-
-        const simulation = simVersion?.simulations;
-        const normalizedSimulation = Array.isArray(simulation) ? simulation[0] : simulation;
+        const activity = Array.isArray(row.activities) ? row.activities[0] : row.activities;
+        const offeringRaw = activity?.course_offerings;
+        const offering = (Array.isArray(offeringRaw) ? offeringRaw[0] : offeringRaw) as any;
+        const courseRaw = offering?.courses;
+        const course = (Array.isArray(courseRaw) ? courseRaw[0] : courseRaw) as any;
+        const termRaw = offering?.terms;
+        const term = (Array.isArray(termRaw) ? termRaw[0] : termRaw) as any;
+        const simVersionRaw = activity?.simulation_versions;
+        const simVersion = (Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw) as any;
+        const simulationRaw = simVersion?.simulations;
+        const simulation = (Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw) as any;
 
         return {
           id: row.id,
+          attempt_no: row.attempt_no,
           submitted_at: row.submitted_at,
-          user_id: row.user_id,
-          simulation_versions: simVersion
+          student_id: row.student_id,
+          activities: activity
             ? {
-                version: simVersion.version,
-                simulations: normalizedSimulation ?? null,
+                id: activity.id,
+                title: activity.title,
+                course_offerings: offering
+                  ? {
+                      offering_code: offering.offering_code,
+                      courses: Array.isArray(course) ? course[0] : course ?? null,
+                      terms: Array.isArray(term) ? term[0] : term ?? null,
+                    }
+                  : null,
+                simulation_versions: simVersion
+                  ? {
+                      version: simVersion.version,
+                      simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
+                    }
+                  : null,
               }
             : null,
-        } satisfies AttemptWithSimulation;
+        } satisfies AttemptWithActivity;
       });
 
       setAttempts(normalizedAttempts);
@@ -79,8 +98,9 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
+                    <th style={{ padding: '8px 6px' }}>Activity</th>
                     <th style={{ padding: '8px 6px' }}>Simulation</th>
-                    <th style={{ padding: '8px 6px' }}>Version</th>
+                    <th style={{ padding: '8px 6px' }}>Attempt</th>
                     <th style={{ padding: '8px 6px' }}>Student</th>
                     <th style={{ padding: '8px 6px' }}>Submitted</th>
                   </tr>
@@ -93,11 +113,22 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                           to={`/instructor/attempts/${attempt.id}`}
                           style={{ color: '#0ea5e9', fontWeight: 600 }}
                         >
-                          {attempt.simulation_versions?.simulations?.title ?? 'Unknown simulation'}
+                          {attempt.activities?.title ?? 'Unknown activity'}
                         </Link>
                       </td>
-                      <td style={{ padding: '10px 6px' }}>{attempt.simulation_versions?.version ?? '—'}</td>
-                      <td style={{ padding: '10px 6px', color: '#475569' }}>{attempt.user_id}</td>
+                      <td style={{ padding: '10px 6px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <strong>{attempt.activities?.simulation_versions?.simulations?.title ?? 'Unknown simulation'}</strong>
+                          <span style={{ color: '#475569', fontSize: 13 }}>
+                            Version {attempt.activities?.simulation_versions?.version ?? '—'}
+                          </span>
+                          <span style={{ color: '#475569', fontSize: 13 }}>
+                            Offering {attempt.activities?.course_offerings?.offering_code ?? '—'}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 6px', color: '#475569' }}>#{attempt.attempt_no}</td>
+                      <td style={{ padding: '10px 6px', color: '#475569' }}>{attempt.student_id}</td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>
                         {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : '—'}
                       </td>

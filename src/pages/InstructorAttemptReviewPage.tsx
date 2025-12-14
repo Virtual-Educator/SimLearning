@@ -62,16 +62,31 @@ export function InstructorAttemptReviewPage() {
       return;
     }
 
-    const simVersion = Array.isArray(attemptData.simulation_versions)
-      ? attemptData.simulation_versions[0]
-      : attemptData.simulation_versions;
+    const activity = Array.isArray(attemptData.activities)
+      ? attemptData.activities[0]
+      : attemptData.activities;
+    const offering = activity?.course_offerings;
+    const course = offering?.courses;
+    const simVersion = activity?.simulation_versions;
     const simulation = simVersion?.simulations;
     const normalizedAttempt: AttemptDetail = {
       ...attemptData,
-      simulation_versions: simVersion
+      activities: activity
         ? {
-            version: simVersion.version,
-            simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
+            id: activity.id,
+            title: activity.title,
+            course_offerings: offering
+              ? {
+                  offering_code: offering.offering_code,
+                  courses: Array.isArray(course) ? course[0] : course ?? null,
+                }
+              : null,
+            simulation_versions: simVersion
+              ? {
+                  version: simVersion.version,
+                  simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
+                }
+              : null,
           }
         : null,
     };
@@ -123,8 +138,8 @@ export function InstructorAttemptReviewPage() {
     setSavingFeedback(false);
   }
 
-  const simulationTitle = attempt?.simulation_versions?.simulations?.title ?? 'Unknown simulation';
-  const version = attempt?.simulation_versions?.version ?? '—';
+  const simulationTitle = attempt?.activities?.simulation_versions?.simulations?.title ?? 'Unknown simulation';
+  const version = attempt?.activities?.simulation_versions?.version ?? '—';
 
   return (
     <div className="page">
@@ -151,17 +166,25 @@ export function InstructorAttemptReviewPage() {
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               <div>
                 <div style={{ fontSize: 12, color: '#475569' }}>Student</div>
-                <div style={{ fontWeight: 600 }}>{attempt.user_id}</div>
+                <div style={{ fontWeight: 600 }}>{attempt.student_id}</div>
               </div>
               <div>
                 <div style={{ fontSize: 12, color: '#475569' }}>Status</div>
                 <div style={{ fontWeight: 600 }}>{attempt.status}</div>
               </div>
               <div>
+                <div style={{ fontSize: 12, color: '#475569' }}>Attempt</div>
+                <div style={{ fontWeight: 600 }}>#{attempt.attempt_no}</div>
+              </div>
+              <div>
                 <div style={{ fontSize: 12, color: '#475569' }}>Submitted</div>
                 <div style={{ fontWeight: 600 }}>
                   {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : '—'}
                 </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: '#475569' }}>Offering</div>
+                <div style={{ fontWeight: 600 }}>{attempt.activities?.course_offerings?.offering_code ?? '—'}</div>
               </div>
             </section>
 
