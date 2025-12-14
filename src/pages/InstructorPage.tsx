@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { fetchSubmittedAttempts, type AttemptWithSimulation } from '../lib/api';
+import { fetchSubmittedAttempts, type AttemptWithActivity } from '../lib/api';
 
 
 interface InstructorPageProps {
@@ -10,7 +10,7 @@ interface InstructorPageProps {
 
 export function InstructorPage({ onSignOut }: InstructorPageProps) {
   const { session } = useAuth();
-  const [attempts, setAttempts] = useState<AttemptWithSimulation[]>([]);
+  const [attempts, setAttempts] = useState<AttemptWithActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,50 +28,27 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
 
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await fetchSubmittedAttempts(session.user.id);
+    const { data, error: fetchError } = await fetchSubmittedAttempts();
     if (fetchError) {
       setError('Unable to load submitted attempts.');
     } else {
       const normalizedAttempts = (data ?? []).map((row) => {
-
-        const simVersionRaw = row.simulation_versions as unknown;
+        const activityRaw = row.activities;
+        const activity = Array.isArray(activityRaw) ? activityRaw[0] : activityRaw;
+        const simVersionRaw = activity?.simulation_versions;
         const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
-        const simulationRaw = (simVersion as any)?.simulations;
+        const simulationRaw = simVersion?.simulations;
         const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
 
         return {
           ...row,
-          simulation_versions: simVersion ? { ...(simVersion as any), simulations: simulation ?? null } : null,
-        } as AttemptWithSimulation;
-
-        const simVersionRaw = row.simulation_versions;
-        const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
-        const simulationRaw = simVersion?.simulations;
-        const simulation = (Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw) as any;
-        const courseRaw = row.course;
-        const course = (Array.isArray(courseRaw) ? courseRaw[0] : courseRaw) as any;
-
-        return {
-          id: row.id,
-          attempt_no: row.attempt_no,
-          submitted_at: row.submitted_at,
-          status: row.status,
-          student_id: row.student_id,
-          course: course
+          activities: activity
             ? {
-                id: course.id,
-                code: course.code,
-                title: course.title,
+                ...activity,
+                simulation_versions: simVersion ? { ...simVersion, simulations: simulation ?? null } : null,
               }
             : null,
-          simulation_versions: simVersion
-            ? {
-                version: simVersion.version,
-                simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
-              }
-            : null,
-        } satisfies AttemptWithCourse;
-
+        } satisfies AttemptWithActivity;
       });
 
       setAttempts(normalizedAttempts);
@@ -119,20 +96,24 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {attempts.map((attempt) => (
-                    <tr key={attempt.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '10px 6px' }}>
-                        <Link to={`/instructor/attempts/${attempt.id}`} style={{ color: '#0ea5e9', fontWeight: 600 }}>
-                          {attempt.simulation_versions?.simulations?.title ?? 'Unknown simulation'}
-                        </Link>
-                        <div style={{ color: '#475569', fontSize: 13 }}>
-                          {attempt.simulation_versions?.simulations?.slug ?? 'Unknown slug'}
-                        </div>
-                      </td>
+                  {attempts.map((attempt) => {
+                    const attemptActivity = attempt.activities;
+                    const resolvedActivity = Array.isArray(attemptActivity) ? attemptActivity[0] : attemptActivity;
 
-                      <td style={{ padding: '10px 6px', color: '#475569' }}>
-                        {attempt.simulation_versions?.version ?? '—'}
-                      </td>
+                    return (
+                      <tr key={attempt.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px 6px' }}>
+                          <Link to={`/instructor/attempts/${attempt.id}`} style={{ color: '#0ea5e9', fontWeight: 600 }}>
+                            {resolvedActivity?.simulation_versions?.simulations?.title ?? 'Unknown simulation'}
+                          </Link>
+                          <div style={{ color: '#475569', fontSize: 13 }}>
+                            {resolvedActivity?.simulation_versions?.simulations?.slug ?? 'Unknown slug'}
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '10px 6px', color: '#475569' }}>
+                          {resolvedActivity?.simulation_versions?.version ?? '—'}
+                        </td>
 
                       <td style={{ padding: '10px 6px', color: '#475569' }}>
                         #{attempt.attempt_no}
@@ -150,7 +131,8 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                         {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : '—'}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
