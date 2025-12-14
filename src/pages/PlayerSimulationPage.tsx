@@ -49,9 +49,9 @@ type AttemptRecord = {
 type AttemptResponse = {
   response_key: string;
   response_text: string | null;
-  response_index?: number | null;
-  response_type?: string | null;
+  response_json?: { text?: string } | null;
   updated_at?: string | null;
+  created_at?: string | null;
 };
 
 type AttemptEventRow = {
@@ -190,7 +190,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
 
     const { data: responseRows, error: responsesError } = await supabase
       .from('attempt_responses')
-      .select('response_key, response_text, updated_at')
+      .select('response_key, response_text, response_json, updated_at, created_at')
       .eq('attempt_id', attemptRecord.id);
 
     if (responsesError) {
@@ -202,11 +202,13 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     const typedResponses = (responseRows ?? []) as AttemptResponse[];
     setLoadedResponses(typedResponses);
     const primaryResponse = typedResponses.find((row) => row.response_key === 'primary');
-    if (primaryResponse?.response_text) {
-      setResponseText(primaryResponse.response_text);
+    const resolvedResponseText =
+      primaryResponse?.response_text ?? (primaryResponse?.response_json as { text?: string } | null)?.text;
+    if (resolvedResponseText) {
+      setResponseText(resolvedResponseText);
     }
-    if (primaryResponse?.updated_at) {
-      setLastSavedAt(primaryResponse.updated_at);
+    if (primaryResponse?.updated_at || primaryResponse?.created_at) {
+      setLastSavedAt(primaryResponse.updated_at ?? primaryResponse.created_at ?? null);
     }
 
     const { data: eventRows, error: eventsError } = await supabase
@@ -360,8 +362,6 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     setSavingDraft(true);
     setSaveMessage(null);
     const now = new Date().toISOString();
-    const responseIndex = 0;
-    const responseType = 'text';
 
     const { data: responseRow, error: responseError } = await supabase
       .from('attempt_responses')
@@ -370,21 +370,16 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
           attempt_id: attemptId,
           response_key: 'primary',
           response_text: responseText,
-          response_json: null,
-          response_index: responseIndex,
-          response_type: responseType,
-          updated_at: now,
+          response_json: { text: responseText },
         },
-        { onConflict: 'attempt_id,response_index,response_type' }
+        { onConflict: 'attempt_id,response_key' }
       )
-      .select('response_key, response_text, response_index, response_type, updated_at')
+      .select('response_key, response_text, response_json, updated_at, created_at')
       .single();
 
     if (responseError) {
       console.error('Unable to save draft response', {
         attemptId,
-        responseIndex,
-        responseType,
         error: responseError.message,
       });
       setError(`Unable to save draft response: ${responseError.message}`);
@@ -392,9 +387,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
       return false;
     }
 
-    if (responseRow?.updated_at) {
-      setLastSavedAt(responseRow.updated_at);
-    }
+    setLastSavedAt(responseRow?.updated_at ?? responseRow?.created_at ?? now);
 
     const newEvents = getAttemptEventsSince(eventCursor);
     if (newEvents.length > 0) {
@@ -468,7 +461,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
 
     const { data: attemptRow, error: attemptError } = await supabase
       .from('attempts')
-      .select('id, simulation_version_id, status, started_at, submitted_at, updated_at, response_meta, pins, transcript')
+      .select('id, user_id, simulation_version_id, status, started_at, submitted_at, response_meta, created_at, updated_at')
       .eq('id', attemptId)
       .single();
 
@@ -480,7 +473,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
 
     const { data: responses, error: responsesError } = await supabase
       .from('attempt_responses')
-      .select('id, response_key, response_text, created_at, updated_at')
+      .select('id, response_key, response_text, response_json, created_at, updated_at')
       .eq('attempt_id', attemptId);
 
     if (responsesError) {
