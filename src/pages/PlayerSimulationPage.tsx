@@ -49,6 +49,8 @@ type AttemptRecord = {
 type AttemptResponse = {
   response_key: string;
   response_text: string | null;
+  response_index?: number | null;
+  response_type?: string | null;
   updated_at?: string | null;
 };
 
@@ -358,14 +360,33 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     setSavingDraft(true);
     setSaveMessage(null);
     const now = new Date().toISOString();
+    const responseIndex = 0;
+    const responseType = 'text';
 
     const { data: responseRow, error: responseError } = await supabase
       .from('attempt_responses')
-      .upsert({ attempt_id: attemptId, response_key: 'primary', response_text: responseText })
-      .select('response_key, response_text, updated_at')
+      .upsert(
+        {
+          attempt_id: attemptId,
+          response_key: 'primary',
+          response_text: responseText,
+          response_json: null,
+          response_index: responseIndex,
+          response_type: responseType,
+          updated_at: now,
+        },
+        { onConflict: 'attempt_id,response_index,response_type' }
+      )
+      .select('response_key, response_text, response_index, response_type, updated_at')
       .single();
 
     if (responseError) {
+      console.error('Unable to save draft response', {
+        attemptId,
+        responseIndex,
+        responseType,
+        error: responseError.message,
+      });
       setError(`Unable to save draft response: ${responseError.message}`);
       setSavingDraft(false);
       return false;
