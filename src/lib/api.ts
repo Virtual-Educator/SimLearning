@@ -225,6 +225,54 @@ export async function fetchPublishedSimulationVersionBySimulationId(simulationId
     .maybeSingle();
 }
 
+export async function startSimulationAttempt(input: {
+  simulationId: string;
+  simulationVersionId: string;
+  courseId?: string | null;
+}) {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+
+  if (!userId) {
+    return { data: null, error: new Error('You must be signed in to start an attempt.') };
+  }
+
+  const now = new Date().toISOString();
+
+  const { data: attemptRow, error: attemptError } = await supabase
+    .from('attempts')
+    .insert({
+      simulation_version_id: input.simulationVersionId,
+      user_id: userId,
+      course_id: input.courseId ?? null,
+      status: 'draft',
+      started_at: now,
+      response_meta: {},
+    })
+    .select('id')
+    .single();
+
+  if (attemptError || !attemptRow) {
+    return { data: null, error: attemptError ?? new Error('Unable to create attempt') };
+  }
+
+  const { error: eventError } = await supabase.from('attempt_events').insert({
+    attempt_id: attemptRow.id,
+    event_type: 'attempt_started',
+    payload: {
+      simulation_id: input.simulationId,
+      simulation_version_id: input.simulationVersionId,
+      course_id: input.courseId ?? null,
+    },
+  });
+
+  if (eventError) {
+    return { data: null, error: eventError };
+  }
+
+  return { data: attemptRow, error: null };
+}
+
 export async function getStudentAssignedSimulations() {
   const { data: userData } = await supabase.auth.getUser();
   const studentId = userData?.user?.id;
