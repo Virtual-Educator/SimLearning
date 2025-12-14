@@ -6,10 +6,6 @@ import { SceneFrame } from '../components/SceneFrame';
 import { TopBar } from '../components/TopBar';
 import { UtilityPanel, UtilityTab } from '../components/UtilityPanel';
 import { getAttemptEvents, getAttemptEventsSince, logEvent, resetAttemptEvents } from '../sim/attempt';
-import {
-  fetchPublishedSimulationVersionBySimulationId,
-  type Simulation,
-} from '../lib/api';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,6 +40,7 @@ type AttemptRecord = {
   started_at?: string;
   submitted_at?: string | null;
   updated_at?: string | null;
+  attempt_no: number;
 };
 
 type AttemptResponse = {
@@ -61,21 +58,29 @@ type AttemptEventRow = {
   created_at?: string;
 };
 
+interface ActivityMeta {
+  title: string;
+  offering_code: string;
+  course_title: string;
+  simulation_title: string;
+  version: string;
+}
+
 function getStoredPanelState() {
   if (typeof window === 'undefined') return false;
   const stored = window.localStorage.getItem(PANEL_STORAGE_KEY);
   return stored === 'true';
 }
 
-interface PlayerSimulationPageProps {
+interface PlayerActivityPageProps {
   onSignOut: () => Promise<void>;
 }
 
-export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
-  const { simulationId } = useParams<{ simulationId: string }>();
+export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
+  const { activityId } = useParams<{ activityId: string }>();
   const { session } = useAuth();
   const [manifest, setManifest] = useState<SimulationManifest | null>(null);
-  const [simulationMeta, setSimulationMeta] = useState<Simulation | null>(null);
+  const [activityMeta, setActivityMeta] = useState<ActivityMeta | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState<boolean>(() => getStoredPanelState());
@@ -83,9 +88,10 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
   const [showGrid, setShowGrid] = useState(false);
   const [pinMode, setPinMode] = useState(false);
   const [pins, setPins] = useState<PinLocation[]>([]);
-  const [loadingPublished, setLoadingPublished] = useState(false);
+  const [loadingActivity, setLoadingActivity] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [attemptStatus, setAttemptStatus] = useState<AttemptRecord['status']>('draft');
+  const [attemptNo, setAttemptNo] = useState<number | null>(null);
   const [attemptLoading, setAttemptLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -112,9 +118,9 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
   };
 
   useEffect(() => {
-    loadPublishedSimulation();
+    loadActivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simulationId]);
+  }, [activityId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -143,14 +149,14 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     setAttemptLoading(true);
     setAttemptStatus('draft');
     setAttemptId(null);
+    setAttemptNo(null);
 
-    const { data: existingAttempt, error: attemptError } = await supabase
+    const { data: existingAttempts, error: attemptError } = await supabase
       .from('attempts')
-      .select('id, status, started_at, submitted_at, updated_at')
-      .eq('user_id', session.user.id)
-      .eq('simulation_version_id', simulationVersionId)
-      .eq('status', 'draft')
-      .maybeSingle();
+      .select('id, status, started_at, submitted_at, updated_at, attempt_no')
+      .eq('student_id', session.user.id)
+      .eq('activity_id', activityId)
+      .order('attempt_no', { ascending: false });
 
     if (attemptError) {
       setError(`Unable to load attempt: ${attemptError.message}`);
@@ -158,19 +164,32 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
       return;
     }
 
-    let attemptRecord = existingAttempt as AttemptRecord | null;
+    let attemptRecord = (existingAttempts as AttemptRecord[] | null)?.find((a) => a.status === 'draft') ?? null;
 
     if (!attemptRecord) {
+      const { data: nextAttemptNo, error: attemptNoError } = await supabase.rpc('next_attempt_no', {
+        activity_id: activityId,
+        student_id: session.user.id,
+      });
+
+      if (attemptNoError || !nextAttemptNo) {
+        setError(`Unable to start a new attempt: ${attemptNoError?.message ?? 'Unknown error'}`);
+        setAttemptLoading(false);
+        return;
+      }
+
       const now = new Date().toISOString();
       const { data: createdAttempt, error: createError } = await supabase
         .from('attempts')
         .insert({
-          user_id: session.user.id,
+          student_id: session.user.id,
+          activity_id: activityId,
           simulation_version_id: simulationVersionId,
           status: 'draft',
+          attempt_no: nextAttemptNo as number,
           started_at: now,
         })
-        .select('id, status, started_at, submitted_at, updated_at')
+        .select('id, status, started_at, submitted_at, updated_at, attempt_no')
         .single();
 
       if (createError) {
@@ -184,6 +203,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
 
     setAttemptId(attemptRecord.id);
     setAttemptStatus(attemptRecord.status);
+    setAttemptNo(attemptRecord.attempt_no);
     if (attemptRecord.updated_at) {
       setLastSavedAt(attemptRecord.updated_at);
     }
@@ -227,12 +247,13 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     setAttemptLoading(false);
   };
 
-  const loadPublishedSimulation = async () => {
+  const loadActivity = async () => {
     setIsLoading(true);
     setError(null);
-    setLoadingPublished(true);
+    setLoadingActivity(true);
     setAttemptId(null);
     setAttemptStatus('draft');
+    setAttemptNo(null);
     setResponseText('');
     setLastSavedAt(null);
     setSaveMessage(null);
@@ -241,76 +262,105 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     resetAttemptEvents();
     setEventCursor(0);
 
-    if (!simulationId) {
-      setError('Simulation id is required.');
+    if (!activityId) {
+      setError('Activity id is required.');
       setIsLoading(false);
-      setLoadingPublished(false);
+      setLoadingActivity(false);
       return;
     }
 
-    const { data, error: fetchError } = await fetchPublishedSimulationVersionBySimulationId(simulationId);
+    const { data, error: fetchError } = await supabase
+      .from('activities')
+      .select(
+        `id, title, opens_at, due_at, allow_resubmissions, max_submissions,
+         course_offerings (offering_code, courses (course_code, title)),
+         simulation_versions (id, version, status, manifest, simulations (id, title, description))`
+      )
+      .eq('id', activityId)
+      .maybeSingle();
 
     if (fetchError) {
-      setError(`Unable to load the published simulation: ${fetchError.message}`);
+      setError(`Unable to load activity: ${fetchError.message}`);
       setManifest(null);
-      setSimulationMeta(null);
+      setActivityMeta(null);
       setIsLoading(false);
-      setLoadingPublished(false);
+      setLoadingActivity(false);
       return;
     }
 
     if (!data) {
-      setError('No published version is available for this simulation.');
+      setError('Activity not found.');
       setManifest(null);
-      setSimulationMeta(null);
+      setActivityMeta(null);
       setIsLoading(false);
-      setLoadingPublished(false);
+      setLoadingActivity(false);
       return;
     }
 
-    const simulationMeta = Array.isArray(data.simulations) ? data.simulations[0] : data.simulations;
-    const manifestJson = data.manifest as Partial<SimulationManifest> | null;
+    const offeringRaw = data.course_offerings;
+    const offering = (Array.isArray(offeringRaw) ? offeringRaw[0] : offeringRaw) as
+      | { offering_code?: string; courses?: { course_code?: string; title?: string } | { course_code?: string; title?: string }[] }
+      | null;
+    const courseRaw = offering?.courses;
+    const course = Array.isArray(courseRaw) ? courseRaw[0] : courseRaw;
+    const simVersionRaw = data.simulation_versions;
+    const simVersion = (Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw) as
+      | { id: string; version: string; status: string; manifest: any; simulations?: { id?: string; title?: string; description?: string } | { id?: string; title?: string; description?: string }[] }
+      | null;
+    const simulationRaw = simVersion?.simulations;
+    const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
 
-    if (!manifestJson || typeof manifestJson !== 'object') {
+    if (!simVersion?.manifest || typeof simVersion.manifest !== 'object') {
       setError('Published manifest is invalid.');
       setManifest(null);
-      setSimulationMeta(null);
+      setActivityMeta(null);
       setIsLoading(false);
-      setLoadingPublished(false);
+      setLoadingActivity(false);
       return;
     }
 
-    if (!manifestJson.scene || typeof manifestJson.scene !== 'object' || manifestJson.scene.type !== 'image' || !manifestJson.scene.src) {
+    if (
+      !simVersion.manifest.scene ||
+      typeof simVersion.manifest.scene !== 'object' ||
+      simVersion.manifest.scene.type !== 'image' ||
+      !simVersion.manifest.scene.src
+    ) {
       setError('Published manifest is missing a valid image scene.');
       setManifest(null);
-      setSimulationMeta(null);
+      setActivityMeta(null);
       setIsLoading(false);
-      setLoadingPublished(false);
+      setLoadingActivity(false);
       return;
     }
 
     const resolvedManifest: SimulationManifest = {
-      id: manifestJson.id ?? data.simulation_id,
-      version: manifestJson.version ?? data.version,
-      title: manifestJson.title ?? simulationMeta?.title ?? 'Simulation',
-      description: manifestJson.description ?? simulationMeta?.description ?? '',
-      scene: manifestJson.scene,
+      id: simVersion.manifest.id ?? simVersion.id ?? simulation?.id ?? 'simulation',
+      version: simVersion.manifest.version ?? simVersion.version,
+      title: simVersion.manifest.title ?? simulation?.title ?? data.title,
+      description: simVersion.manifest.description ?? simulation?.description ?? '',
+      scene: simVersion.manifest.scene,
       task:
-        manifestJson.task ?? {
+        simVersion.manifest.task ?? {
           prompt: 'No task provided.',
           checklist: [],
         },
-      tools: manifestJson.tools,
+      tools: simVersion.manifest.tools,
     };
 
     setManifest(resolvedManifest);
-    setSimulationMeta(simulationMeta ?? null);
+    setActivityMeta({
+      title: data.title,
+      offering_code: offering?.offering_code ?? '—',
+      course_title: course?.title ?? course?.course_code ?? 'Course',
+      simulation_title: simulation?.title ?? 'Simulation',
+      version: simVersion.version,
+    });
     setShowGrid(false);
     setPinMode(false);
     setPins([]);
-    await initializeAttempt(data.id);
+    await initializeAttempt(simVersion.id);
     setIsLoading(false);
-    setLoadingPublished(false);
+    setLoadingActivity(false);
   };
 
   const gridAllowed = Boolean(manifest?.tools?.grid);
@@ -462,7 +512,9 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
 
     const { data: attemptRow, error: attemptError } = await supabase
       .from('attempts')
-      .select('id, user_id, simulation_version_id, status, started_at, submitted_at, response_meta, created_at, updated_at')
+      .select(
+        'id, student_id, activity_id, attempt_no, simulation_version_id, status, started_at, submitted_at, response_meta, created_at, updated_at'
+      )
       .eq('id', attemptId)
       .single();
 
@@ -511,8 +563,8 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     setDownloadInProgress(false);
   };
 
-  const resolvedTitle = manifest?.title ?? simulationMeta?.title ?? 'SimLearning Player';
-  const resolvedDescription = manifest?.description ?? simulationMeta?.description ?? 'Load and run interactive simulations.';
+  const resolvedTitle = activityMeta?.title ?? 'SimLearning Player';
+  const resolvedDescription = activityMeta?.course_title ?? 'Load and run interactive simulations.';
   const toggleButtonLabel = `${isPanelCollapsed ? 'Expand' : 'Collapse'} utility panel (${TOGGLE_SHORTCUT})`;
   const canSaveDraft = Boolean(attemptId) && !attemptLocked && !savingDraft && !combinedLoading && !submitting && !error;
   const canSubmitAttempt =
@@ -535,21 +587,27 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
             <div>
               <p style={{ margin: '0 0 6px' }}>
                 <Link to="/player" style={{ color: '#0ea5e9', fontWeight: 600, textDecoration: 'none' }}>
-                  ← Back to published list
+                  ← Back to activities
                 </Link>
               </p>
-              <h2 style={{ margin: 0 }}>Simulation version</h2>
+              <h2 style={{ margin: 0 }}>Activity</h2>
               <p style={{ margin: '4px 0', color: '#475569' }}>
-                {manifest ? `Version ${manifest.version}` : 'Load the latest published version.'}
+                {activityMeta?.simulation_title ? `${activityMeta.simulation_title} (v${activityMeta.version})` : 'Loading…'}
               </p>
+              <p style={{ margin: '4px 0', color: '#475569' }}>
+                {activityMeta?.offering_code ? `Offering ${activityMeta.offering_code}` : ''}
+              </p>
+              {attemptNo !== null && (
+                <p style={{ margin: '4px 0', color: '#0f172a', fontWeight: 600 }}>Attempt #{attemptNo}</p>
+              )}
             </div>
-            <button className="form__submit" onClick={loadPublishedSimulation} disabled={loadingPublished}>
+            <button className="form__submit" onClick={loadActivity} disabled={loadingActivity}>
               Refresh
             </button>
           </div>
-          {loadingPublished && <p>Loading published version…</p>}
+          {loadingActivity && <p>Loading activity…</p>}
           {error && <div className="form__error">{error}</div>}
-          {!loadingPublished && !error && !manifest && <p>No published manifest found for this simulation.</p>}
+          {!loadingActivity && !error && !manifest && <p>No published manifest found for this activity.</p>}
         </div>
       </section>
 
