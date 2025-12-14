@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getStudentAssignedSimulations, type StudentAssignedSimulation } from '../lib/api';
+import { getStudentAssignedSimulations, startSimulationAttempt, type StudentAssignedSimulation } from '../lib/api';
 
 interface PlayerPageProps {
   onSignOut: () => Promise<void>;
@@ -8,9 +9,12 @@ interface PlayerPageProps {
 
 export function PlayerPage({ onSignOut }: PlayerPageProps) {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const [simulations, setSimulations] = useState<StudentAssignedSimulation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [startingId, setStartingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadSimulations();
@@ -45,6 +49,30 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
     setLoading(false);
   }
 
+  async function handleStart(simulation: StudentAssignedSimulation) {
+    if (!session?.user) {
+      setStartError('You must be signed in to start a simulation.');
+      return;
+    }
+
+    setStartError(null);
+    setStartingId(simulation.version_id);
+
+    const { data, error: startErrorResult } = await startSimulationAttempt({
+      simulationId: simulation.simulation_id,
+      simulationVersionId: simulation.version_id,
+      courseId: simulation.course_id,
+    });
+
+    if (startErrorResult || !data) {
+      setStartError(startErrorResult?.message ?? 'Unable to start simulation.');
+      setStartingId(null);
+      return;
+    }
+
+    navigate(`/player/attempts/${data.id}`);
+  }
+
   return (
     <div className="page">
       <div className="card" style={{ maxWidth: '960px', width: '100%' }}>
@@ -67,6 +95,7 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
           </div>
           {loading && <p>Loading simulations…</p>}
           {error && <div className="form__error">{error}</div>}
+          {startError && <div className="form__error">{startError}</div>}
           {!loading && !error && sortedSimulations.length === 0 && (
             <p>No simulations assigned yet. Check enrollment or ask your instructor.</p>
           )}
@@ -78,6 +107,7 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
                     <th style={{ padding: '8px 6px' }}>Course</th>
                     <th style={{ padding: '8px 6px' }}>Simulation</th>
                     <th style={{ padding: '8px 6px' }}>Version</th>
+                    <th style={{ padding: '8px 6px' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -104,6 +134,15 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
                         </div>
                       </td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>v{simulation.version}</td>
+                      <td style={{ padding: '10px 6px' }}>
+                        <button
+                          className="form__submit"
+                          onClick={() => handleStart(simulation)}
+                          disabled={startingId === simulation.version_id}
+                        >
+                          {startingId === simulation.version_id ? 'Starting…' : 'Start'}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -105,6 +105,14 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/player/attempts/:attemptId"
+          element={
+            <ProtectedRoute>
+              <PlayerActivityPage onSignOut={handleSignOut} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/instructor"
           element={
             <ProtectedRoute allowedRoles={['instructor', 'admin']}>

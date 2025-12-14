@@ -77,7 +77,7 @@ interface PlayerActivityPageProps {
 }
 
 export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
-  const { activityId } = useParams<{ activityId: string }>();
+  const { activityId, attemptId: attemptIdParam } = useParams<{ activityId?: string; attemptId?: string }>();
   const { session } = useAuth();
   const [manifest, setManifest] = useState<SimulationManifest | null>(null);
   const [activityMeta, setActivityMeta] = useState<ActivityMeta | null>(null);
@@ -120,7 +120,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
   useEffect(() => {
     loadActivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activityId]);
+  }, [activityId, attemptIdParam]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -262,9 +262,144 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     setLoadedEvents([]);
     resetAttemptEvents();
     setEventCursor(0);
+    setAttemptLoading(true);
 
-    if (!activityId) {
-      setError('Activity id is required.');
+    if (!activityId && !attemptIdParam) {
+      setError('An activity or attempt id is required.');
+      setIsLoading(false);
+      setLoadingActivity(false);
+      return;
+    }
+
+    if (attemptIdParam) {
+      const { data: attemptRow, error: attemptError } = await supabase
+        .from('attempts')
+        .select(
+          `id, status, attempt_no, course_id, simulation_version_id, simulation_versions (id, version, manifest, simulations (id, title, description, slug))`
+        )
+        .eq('id', attemptIdParam)
+        .maybeSingle();
+
+      if (attemptError) {
+        setError(`Unable to load attempt: ${attemptError.message}`);
+        setManifest(null);
+        setActivityMeta(null);
+        setIsLoading(false);
+        setLoadingActivity(false);
+        return;
+      }
+
+      if (!attemptRow) {
+        setError('Attempt not found.');
+        setManifest(null);
+        setActivityMeta(null);
+        setIsLoading(false);
+        setLoadingActivity(false);
+        return;
+      }
+
+      const simVersionRaw = attemptRow.simulation_versions;
+      const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
+      const simulationRaw = simVersion?.simulations;
+      const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
+
+      if (!simVersion?.id) {
+        setError('Simulation version not available for this attempt.');
+        setManifest(null);
+        setActivityMeta(null);
+        setIsLoading(false);
+        setLoadingActivity(false);
+        return;
+      }
+
+      if (!simVersion.manifest || typeof simVersion.manifest !== 'object') {
+        setError('Published manifest is invalid.');
+        setManifest(null);
+        setActivityMeta(null);
+        setIsLoading(false);
+        setLoadingActivity(false);
+        return;
+      }
+
+      if (
+        !simVersion.manifest.scene ||
+        typeof simVersion.manifest.scene !== 'object' ||
+        simVersion.manifest.scene.type !== 'image' ||
+        !simVersion.manifest.scene.src
+      ) {
+        setError('Published manifest is missing a valid image scene.');
+        setManifest(null);
+        setActivityMeta(null);
+        setIsLoading(false);
+        setLoadingActivity(false);
+        return;
+      }
+
+      const resolvedManifest: SimulationManifest = {
+        id: simVersion.manifest.id ?? simVersion.id ?? simulation?.id ?? 'simulation',
+        version: simVersion.manifest.version ?? simVersion.version ?? '—',
+        title: simVersion.manifest.title ?? simulation?.title ?? 'Simulation',
+        description: simVersion.manifest.description ?? simulation?.description ?? '',
+        scene: simVersion.manifest.scene,
+        task: simVersion.manifest.task ?? { prompt: 'No task provided.', checklist: [] },
+        tools: simVersion.manifest.tools,
+      };
+
+      setManifest(resolvedManifest);
+      const courseLabel = attemptRow.course_id ? `Course — ${attemptRow.course_id}` : 'Course';
+      setActivityMeta({
+        title: simulation?.title ?? 'Simulation',
+        course_label: courseLabel,
+        simulation_title: simulation?.title ?? 'Simulation',
+        version: simVersion.version ?? '—',
+        course_id: attemptRow.course_id ?? null,
+      });
+
+      setAttemptId(attemptRow.id);
+      setAttemptStatus(attemptRow.status ?? 'draft');
+      setAttemptNo(attemptRow.attempt_no ?? null);
+
+      const { data: responseRows, error: responsesError } = await supabase
+        .from('attempt_responses')
+        .select('response_key, response_text, response_json, updated_at, created_at')
+        .eq('attempt_id', attemptRow.id);
+
+      if (responsesError) {
+        setError(`Unable to load attempt responses: ${responsesError.message}`);
+        setAttemptLoading(false);
+        setIsLoading(false);
+        setLoadingActivity(false);
+        return;
+      }
+
+      const typedResponses = (responseRows ?? []) as AttemptResponse[];
+      setLoadedResponses(typedResponses);
+      const primaryResponse = typedResponses.find((row) => row.response_key === 'primary');
+      const resolvedResponseText =
+        primaryResponse?.response_text ?? (primaryResponse?.response_json as { text?: string } | null)?.text;
+      if (resolvedResponseText) {
+        setResponseText(resolvedResponseText);
+      }
+      if (primaryResponse?.updated_at || primaryResponse?.created_at) {
+        setLastSavedAt(primaryResponse.updated_at ?? primaryResponse.created_at ?? null);
+      }
+
+      const { data: eventRows, error: eventsError } = await supabase
+        .from('attempt_events')
+        .select('id, event_type, payload, created_at')
+        .eq('attempt_id', attemptRow.id)
+        .order('created_at', { ascending: true });
+
+      if (eventsError) {
+        setError(`Unable to load attempt events: ${eventsError.message}`);
+        setAttemptLoading(false);
+        setIsLoading(false);
+        setLoadingActivity(false);
+        return;
+      }
+
+      setLoadedEvents((eventRows ?? []) as AttemptEventRow[]);
+      setAttemptLoading(false);
       setIsLoading(false);
       setLoadingActivity(false);
       return;
