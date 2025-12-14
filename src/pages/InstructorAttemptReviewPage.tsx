@@ -62,23 +62,25 @@ export function InstructorAttemptReviewPage() {
       return;
     }
 
-    const activity = Array.isArray(attemptData.activities)
-      ? attemptData.activities[0]
-      : attemptData.activities;
-    const simVersion = activity?.simulation_versions;
-    const simulation = simVersion?.simulations;
+    const simVersionRaw = attemptData.simulation_versions;
+    const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
+    const simulationRaw = simVersion?.simulations;
+    const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
+    const courseRaw = attemptData.course;
+    const course = Array.isArray(courseRaw) ? courseRaw[0] : courseRaw;
     const normalizedAttempt: AttemptDetail = {
       ...attemptData,
-      activities: activity
+      course: course
         ? {
-            id: activity.id,
-            title: activity.title,
-            simulation_versions: simVersion
-              ? {
-                  version: simVersion.version,
-                  simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
-                }
-              : null,
+            id: course.id,
+            code: course.code,
+            title: course.title,
+          }
+        : null,
+      simulation_versions: simVersion
+        ? {
+            version: simVersion.version,
+            simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
           }
         : null,
     };
@@ -130,8 +132,9 @@ export function InstructorAttemptReviewPage() {
     setSavingFeedback(false);
   }
 
-  const simulationTitle = attempt?.activities?.simulation_versions?.simulations?.title ?? 'Unknown simulation';
-  const version = attempt?.activities?.simulation_versions?.version ?? '—';
+  const simulationTitle = attempt?.simulation_versions?.simulations?.title ?? 'Unknown simulation';
+  const version = attempt?.simulation_versions?.version ?? '—';
+  const courseLabel = attempt?.course?.code ?? 'Course';
 
   return (
     <div className="page">
@@ -176,7 +179,7 @@ export function InstructorAttemptReviewPage() {
               </div>
               <div>
                 <div style={{ fontSize: 12, color: '#475569' }}>Offering</div>
-                <div style={{ fontWeight: 600 }}>Course —</div>
+                <div style={{ fontWeight: 600 }}>{courseLabel}</div>
               </div>
             </section>
 
