@@ -63,17 +63,20 @@ export type Activity = {
   simulation_versions?: (SimulationVersion & { simulations?: Simulation | null }) | null;
 };
 
+type ActivityWithSimulationVersion = Pick<Activity, 'id' | 'title'> & {
+  simulation_versions: (Pick<SimulationVersion, 'version'> & {
+    simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
+  }) | null;
+};
+
 export type AttemptWithActivity = {
   id: string;
   attempt_no: number;
   submitted_at: string | null;
+  status?: string;
 
   student_id: string;
-  activities: Pick<Activity, 'id' | 'title'> & {
-    simulation_versions: (Pick<SimulationVersion, 'version'> & {
-      simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
-    }) | null;
-  } | null;
+  activities: ActivityWithSimulationVersion | ActivityWithSimulationVersion[] | null;
 };
 
 export type AttemptDetail = {
@@ -82,11 +85,7 @@ export type AttemptDetail = {
   status: string;
   attempt_no: number;
   submitted_at: string | null;
-  activities: Pick<Activity, 'id' | 'title'> & {
-    simulation_versions: (Pick<SimulationVersion, 'version'> & {
-      simulations?: Pick<Simulation, 'id' | 'title'> | null;
-    }) | null;
-  } | null;
+  activities: ActivityWithSimulationVersion | ActivityWithSimulationVersion[] | null;
 };
 
 export type AttemptResponseRow = {
@@ -366,11 +365,11 @@ export async function fetchSubmittedAttempts() {
   return supabase
     .from('attempts')
     .select(
-      `id, attempt_no, submitted_at, student_id,
+      `id, attempt_no, submitted_at, status, student_id,
        activities (
          id, title,
          simulation_versions (version, simulations (id, title, slug))
-       )`
+      )`
     )
     .eq('status', 'submitted')
 
@@ -384,7 +383,7 @@ export async function fetchAttemptDetail(attemptId: string) {
       `id, student_id, status, attempt_no, submitted_at,
        activities (
          id, title,
-         simulation_versions (version, simulations (id, title))
+         simulation_versions (version, simulations (id, title, slug))
        )`
     )
     .eq('id', attemptId)

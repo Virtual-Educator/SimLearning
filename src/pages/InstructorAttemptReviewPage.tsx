@@ -62,33 +62,21 @@ export function InstructorAttemptReviewPage() {
       return;
     }
 
-    const simVersionRaw = attemptData.simulation_versions;
+    const activityRaw = attemptData.activities;
+    const activity = Array.isArray(activityRaw) ? activityRaw[0] : activityRaw;
+    const simVersionRaw = activity?.simulation_versions;
     const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
     const simulationRaw = simVersion?.simulations;
     const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
+
     const normalizedAttempt: AttemptDetail = {
       ...attemptData,
-      simulation_versions: simVersion ? { ...simVersion, simulations: simulation ?? null } : null,
-    };
-
-    const courseRaw = attemptData.course;
-    const course = Array.isArray(courseRaw) ? courseRaw[0] : courseRaw;
-    const normalizedAttempt: AttemptDetail = {
-      ...attemptData,
-      course: course
+      activities: activity
         ? {
-            id: course.id,
-            code: course.code,
-            title: course.title,
+            ...activity,
+            simulation_versions: simVersion ? { ...simVersion, simulations: simulation ?? null } : null,
           }
         : null,
-      simulation_versions: simVersion
-        ? {
-            version: simVersion.version,
-            simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
-          }
-        : null,
-
     };
 
     setAttempt(normalizedAttempt);
@@ -138,9 +126,11 @@ export function InstructorAttemptReviewPage() {
     setSavingFeedback(false);
   }
 
-  const simulationTitle = attempt?.simulation_versions?.simulations?.title ?? 'Unknown simulation';
-  const simulationSlug = attempt?.simulation_versions?.simulations?.slug ?? '—';
-  const version = attempt?.simulation_versions?.version ?? '—';
+  const activity = attempt?.activities;
+  const resolvedActivity = Array.isArray(activity) ? activity[0] : activity;
+  const simulationTitle = resolvedActivity?.simulation_versions?.simulations?.title ?? 'Unknown simulation';
+  const simulationSlug = resolvedActivity?.simulation_versions?.simulations?.slug ?? '—';
+  const version = resolvedActivity?.simulation_versions?.version ?? '—';
 
 
   return (
