@@ -444,9 +444,11 @@ export async function fetchAttemptDetail(attemptId: string) {
          id, simulation_id, version, manifest,
          simulations (id, title, slug)
        )`
+    )
     .eq('id', attemptId)
     .maybeSingle();
 }
+
 
 export async function fetchAttemptResponsesByAttempt(attemptId: string) {
   return supabase
