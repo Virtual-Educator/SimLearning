@@ -361,6 +361,7 @@ export async function fetchSubmittedAttempts(instructorId: string) {
     return { data: [], error: null };
   }
 
+
   const { data: courseSimulationRows, error: courseSimulationsError } = await supabase
     .from('course_simulations')
     .select(
@@ -443,6 +444,8 @@ export async function fetchAttemptDetail(attemptId: string) {
          id, simulation_id, version, manifest,
          simulations (id, title, slug)
        )`
+    )
+
     )
     .eq('id', attemptId)
     .maybeSingle();

@@ -71,6 +71,26 @@ export function InstructorAttemptReviewPage() {
       simulation_versions: simVersion ? { ...simVersion, simulations: simulation ?? null } : null,
     };
 
+    const courseRaw = attemptData.course;
+    const course = Array.isArray(courseRaw) ? courseRaw[0] : courseRaw;
+    const normalizedAttempt: AttemptDetail = {
+      ...attemptData,
+      course: course
+        ? {
+            id: course.id,
+            code: course.code,
+            title: course.title,
+          }
+        : null,
+      simulation_versions: simVersion
+        ? {
+            version: simVersion.version,
+            simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
+          }
+        : null,
+
+    };
+
     setAttempt(normalizedAttempt);
 
     const responses = (responsesResult.data ?? []) as AttemptResponseRow[];
@@ -122,6 +142,7 @@ export function InstructorAttemptReviewPage() {
   const simulationSlug = attempt?.simulation_versions?.simulations?.slug ?? '—';
   const version = attempt?.simulation_versions?.version ?? '—';
 
+
   return (
     <div className="page">
       <div className="card" style={{ maxWidth: '960px', width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -164,8 +185,10 @@ export function InstructorAttemptReviewPage() {
                 </div>
               </div>
               <div>
+
                 <div style={{ fontSize: 12, color: '#475569' }}>Simulation slug</div>
                 <div style={{ fontWeight: 600 }}>{simulationSlug}</div>
+
               </div>
             </section>
 

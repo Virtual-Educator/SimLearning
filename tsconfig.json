@@ -12,7 +12,8 @@
     "lib": ["ESNext", "DOM"],
     "skipLibCheck": true,
     "jsx": "react-jsx",
-    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo"
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
+    "noEmit": true
   },
   "include": ["src", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]
