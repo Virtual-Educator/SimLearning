@@ -63,16 +63,17 @@ export type Activity = {
   simulation_versions?: (SimulationVersion & { simulations?: Simulation | null }) | null;
 };
 
-export type AttemptWithSimulation = {
+export type AttemptWithActivity = {
   id: string;
   attempt_no: number;
-  status: string;
   submitted_at: string | null;
+
   student_id: string;
-  simulation_version_id: string;
-  simulation_versions: (Pick<SimulationVersion, 'id' | 'simulation_id' | 'version' | 'manifest'> & {
-    simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
-  }) | null;
+  activities: Pick<Activity, 'id' | 'title'> & {
+    simulation_versions: (Pick<SimulationVersion, 'version'> & {
+      simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
+    }) | null;
+  } | null;
 };
 
 export type AttemptDetail = {
@@ -81,10 +82,11 @@ export type AttemptDetail = {
   status: string;
   attempt_no: number;
   submitted_at: string | null;
-  simulation_version_id: string;
-  simulation_versions: (Pick<SimulationVersion, 'id' | 'simulation_id' | 'version' | 'manifest'> & {
-    simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
-  }) | null;
+  activities: Pick<Activity, 'id' | 'title'> & {
+    simulation_versions: (Pick<SimulationVersion, 'version'> & {
+      simulations?: Pick<Simulation, 'id' | 'title'> | null;
+    }) | null;
+  } | null;
 };
 
 export type AttemptResponseRow = {
@@ -246,7 +248,7 @@ export async function getStudentAssignedSimulations() {
            pinned_version_id,
            simulations (id, slug, title, description),
            pinned_version:simulation_versions!course_simulations_pinned_version_id_fkey (id, version, manifest, published_at, created_at)
-           )
+         )
        )`
     )
     .eq('student_id', studentId);
@@ -343,95 +345,35 @@ export async function getStudentAssignedSimulations() {
   return { data: assignments, error: null };
 }
 
-export async function fetchSubmittedAttempts(instructorId: string) {
-  const { data: instructorCourses, error: coursesError } = await supabase
-    .from('course_instructors')
-    .select('course_id')
-    .eq('instructor_id', instructorId);
-
-  if (coursesError) {
-    return { data: null, error: coursesError };
-  }
-
-  const courseIds = (instructorCourses ?? [])
-    .map((row) => row.course_id as string | null)
-    .filter((id): id is string => Boolean(id));
-
-  if (courseIds.length === 0) {
-    return { data: [], error: null };
-  }
+export async function fetchSubmittedAttempts() {
 
 
-  const { data: courseSimulationRows, error: courseSimulationsError } = await supabase
-    .from('course_simulations')
-    .select(
-      `course_id, simulation_id, pinned_version_id,
-       pinned_version:simulation_versions!course_simulations_pinned_version_id_fkey (id, simulation_id, version, manifest)`
-    )
-    .in('course_id', courseIds);
 
-  if (courseSimulationsError) {
-    return { data: null, error: courseSimulationsError };
-  }
 
-  const simulationIdsNeedingLatest = new Set<string>();
-  const allowedVersions: { id: string; version?: string; manifest?: unknown }[] = [];
 
-  (courseSimulationRows ?? []).forEach((row) => {
-    if (row.pinned_version_id && row.pinned_version) {
-      const pinnedVersion = Array.isArray(row.pinned_version) ? row.pinned_version[0] : row.pinned_version;
-      if (pinnedVersion?.id) {
-        allowedVersions.push(pinnedVersion as { id: string; version?: string; manifest?: unknown });
-      }
-    } else if (row.simulation_id) {
-      simulationIdsNeedingLatest.add(row.simulation_id as string);
-    }
-  });
 
-  if (simulationIdsNeedingLatest.size > 0) {
-    const { data: latestVersions, error: latestError } = await supabase
-      .from('simulation_versions')
-      .select('id, simulation_id, version, manifest, published_at, created_at')
-      .eq('status', 'published')
-      .in('simulation_id', Array.from(simulationIdsNeedingLatest))
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false });
 
-    if (latestError) {
-      return { data: null, error: latestError };
-    }
 
-    const latestBySimulation: Record<string, { id: string; version?: string; manifest?: unknown }> = {};
-    (latestVersions ?? []).forEach((version) => {
-      if (!latestBySimulation[version.simulation_id]) {
-        latestBySimulation[version.simulation_id] = {
-          id: version.id,
-          version: version.version,
-          manifest: version.manifest,
-        };
-      }
-    });
 
-    allowedVersions.push(...Object.values(latestBySimulation));
-  }
 
-  const allowedVersionIds = Array.from(new Set(allowedVersions.map((v) => v.id)));
 
-  if (allowedVersionIds.length === 0) {
-    return { data: [], error: null };
-  }
+
+
+
+
+
 
   return supabase
     .from('attempts')
     .select(
-      `id, attempt_no, status, submitted_at, student_id, simulation_version_id,
-       simulation_versions (
-         id, simulation_id, version, manifest,
-         simulations (id, title, slug)
+      `id, attempt_no, submitted_at, student_id,
+       activities (
+         id, title,
+         simulation_versions (version, simulations (id, title, slug))
        )`
     )
     .eq('status', 'submitted')
-    .in('simulation_version_id', allowedVersionIds)
+
     .order('submitted_at', { ascending: false });
 }
 
@@ -439,16 +381,15 @@ export async function fetchAttemptDetail(attemptId: string) {
   return supabase
     .from('attempts')
     .select(
-      `id, student_id, status, attempt_no, submitted_at, simulation_version_id,
-       simulation_versions (
-         id, simulation_id, version, manifest,
-         simulations (id, title, slug)
+      `id, student_id, status, attempt_no, submitted_at,
+       activities (
+         id, title,
+         simulation_versions (version, simulations (id, title))
        )`
     )
     .eq('id', attemptId)
     .maybeSingle();
 }
-
 
 export async function fetchAttemptResponsesByAttempt(attemptId: string) {
   return supabase
