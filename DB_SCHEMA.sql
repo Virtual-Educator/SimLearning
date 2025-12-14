@@ -153,7 +153,7 @@ create table if not exists public.attempts (
   id uuid primary key default gen_random_uuid(),
   course_id uuid not null references public.courses(id) on delete cascade,
   simulation_version_id uuid not null references public.simulation_versions(id) on delete restrict,
-  student_id uuid not null references public.profiles(user_id) on delete cascade,
+  user_id uuid not null references public.profiles(user_id) on delete cascade,
   status public.attempt_status not null default 'draft',
   started_at timestamptz not null default now(),
   submitted_at timestamptz,
@@ -171,7 +171,7 @@ create trigger trg_attempts_touch
 before update on public.attempts
 for each row execute function public.touch_updated_at();
 
-create index if not exists idx_attempts_student on public.attempts(student_id);
+create index if not exists idx_attempts_user on public.attempts(user_id);
 create index if not exists idx_attempts_course on public.attempts(course_id);
 create index if not exists idx_attempts_simver on public.attempts(simulation_version_id);
 
@@ -188,10 +188,8 @@ create index if not exists idx_attempt_events_attempt on public.attempt_events(a
 create table if not exists public.attempt_feedback (
   id uuid primary key default gen_random_uuid(),
   attempt_id uuid not null unique references public.attempts(id) on delete cascade,
-  instructor_id uuid not null references public.profiles(user_id) on delete cascade,
-  rubric jsonb not null default '{}'::jsonb,
-  overall_score numeric,
-  comments text,
+  created_by uuid not null references public.profiles(user_id) on delete cascade,
+  feedback jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -319,7 +317,7 @@ create policy "attempts read membership"
 on public.attempts for select
 using (
   public.is_admin()
-  or student_id = auth.uid()
+  or user_id = auth.uid()
   or exists (select 1 from public.course_instructors ci where ci.course_id = attempts.course_id and ci.instructor_id = auth.uid())
 );
 
@@ -327,15 +325,15 @@ drop policy if exists "attempts student insert" on public.attempts;
 create policy "attempts student insert"
 on public.attempts for insert
 with check (
-  student_id = auth.uid()
+  user_id = auth.uid()
   and exists (select 1 from public.course_enrollments ce where ce.course_id = attempts.course_id and ce.student_id = auth.uid())
 );
 
 drop policy if exists "attempts student update own draft" on public.attempts;
 create policy "attempts student update own draft"
 on public.attempts for update
-using (student_id = auth.uid() and status = 'draft')
-with check (student_id = auth.uid() and status = 'draft');
+using (user_id = auth.uid() and status = 'draft')
+with check (user_id = auth.uid() and status = 'draft');
 
 drop policy if exists "attempts instructor grade" on public.attempts;
 create policy "attempts instructor grade"
@@ -356,7 +354,7 @@ using (
     select 1 from public.attempts a
     where a.id = attempt_events.attempt_id
       and (
-        a.student_id = auth.uid()
+        a.user_id = auth.uid()
         or exists (select 1 from public.course_instructors ci where ci.course_id = a.course_id and ci.instructor_id = auth.uid())
       )
   )
@@ -369,7 +367,7 @@ with check (
   exists (
     select 1 from public.attempts a
     where a.id = attempt_events.attempt_id
-      and a.student_id = auth.uid()
+      and a.user_id = auth.uid()
       and a.status = 'draft'
   )
 );
@@ -384,8 +382,8 @@ using (
     select 1 from public.attempts a
     where a.id = attempt_feedback.attempt_id
       and (
-        a.student_id = auth.uid()
-        or exists (select 1 from public.course_instructors ci where ci.course_id = a.course_id and ci.instructor_id = auth.uid())
+        a.user_id = auth.uid()
+        or public.is_instructor()
       )
   )
 );
@@ -394,15 +392,8 @@ drop policy if exists "feedback write instructor" on public.attempt_feedback;
 create policy "feedback write instructor"
 on public.attempt_feedback for insert
 with check (
-  public.is_admin()
-  or (
-    instructor_id = auth.uid()
-    and exists (
-      select 1 from public.attempts a
-      where a.id = attempt_feedback.attempt_id
-        and exists (select 1 from public.course_instructors ci where ci.course_id = a.course_id and ci.instructor_id = auth.uid())
-    )
-  )
+  (public.is_admin() or public.is_instructor())
+  and created_by = auth.uid()
 );
 
 drop policy if exists "feedback update instructor" on public.attempt_feedback;
@@ -410,6 +401,56 @@ create policy "feedback update instructor"
 on public.attempt_feedback for update
 using (
   public.is_admin()
-  or instructor_id = auth.uid()
+  or created_by = auth.uid()
 )
-with check (public.is_admin() or instructor_id = auth.uid());
+with check (public.is_admin() or created_by = auth.uid());
+
+-- Instructor review policies for simplified attempt storage (user_id-based)
+-- The React instructor UI reads attempts plus their responses and events, and writes feedback
+-- as a JSON blob. These helpers assume attempts.user_id stores the student id used by the app.
+
+create table if not exists public.attempt_responses (
+  attempt_id uuid not null references public.attempts(id) on delete cascade,
+  response_key text not null,
+  response_text text,
+  response_json jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (attempt_id, response_key)
+);
+
+alter table public.attempt_responses enable row level security;
+
+drop policy if exists "attempt_responses read submitted" on public.attempt_responses;
+create policy "attempt_responses read submitted"
+on public.attempt_responses for select
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.attempts a
+    where a.id = attempt_responses.attempt_id
+      and (
+        a.user_id = auth.uid()
+        or (a.status = 'submitted' and public.is_instructor())
+      )
+  )
+);
+
+drop policy if exists "attempt_responses write student" on public.attempt_responses;
+create policy "attempt_responses write student"
+on public.attempt_responses for all
+using (
+  exists (
+    select 1 from public.attempts a
+    where a.id = attempt_responses.attempt_id
+      and a.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1 from public.attempts a
+    where a.id = attempt_responses.attempt_id
+      and a.user_id = auth.uid()
+  )
+);
+

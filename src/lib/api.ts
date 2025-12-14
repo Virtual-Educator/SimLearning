@@ -29,6 +29,50 @@ export type PublishedSimulationVersion = SimulationVersion & {
   simulations: Simulation;
 };
 
+export type AttemptWithSimulation = {
+  id: string;
+  submitted_at: string | null;
+  user_id: string;
+  simulation_versions: {
+    version: string;
+    simulations: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
+  } | null;
+};
+
+export type AttemptDetail = {
+  id: string;
+  user_id: string;
+  status: string;
+  submitted_at: string | null;
+  simulation_versions: {
+    version: string;
+    simulations: Pick<Simulation, 'id' | 'title'> | null;
+  } | null;
+};
+
+export type AttemptResponseRow = {
+  response_key: string;
+  response_text: string | null;
+  response_json: Record<string, unknown> | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AttemptEventRow = {
+  id: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string | null;
+};
+
+export type AttemptFeedbackRow = {
+  id: string;
+  attempt_id: string;
+  created_by: string;
+  feedback: Record<string, unknown>;
+  created_at: string | null;
+};
+
 export async function fetchSimulations() {
   return supabase
     .from('simulations')
@@ -110,4 +154,60 @@ export async function fetchPublishedSimulationVersionBySimulationId(simulationId
     .order('published_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+}
+
+export async function fetchSubmittedAttempts() {
+  return supabase
+    .from('attempts')
+    .select(
+      'id, submitted_at, user_id, simulation_versions (version, simulations (id, title, slug))'
+    )
+    .eq('status', 'submitted')
+    .order('submitted_at', { ascending: false });
+}
+
+export async function fetchAttemptDetail(attemptId: string) {
+  return supabase
+    .from('attempts')
+    .select('id, user_id, status, submitted_at, simulation_versions (version, simulations (id, title))')
+    .eq('id', attemptId)
+    .maybeSingle();
+}
+
+export async function fetchAttemptResponsesByAttempt(attemptId: string) {
+  return supabase
+    .from('attempt_responses')
+    .select('response_key, response_text, response_json, created_at, updated_at')
+    .eq('attempt_id', attemptId);
+}
+
+export async function fetchAttemptEventsByAttempt(attemptId: string) {
+  return supabase
+    .from('attempt_events')
+    .select('id, event_type, payload, created_at')
+    .eq('attempt_id', attemptId)
+    .order('created_at', { ascending: true });
+}
+
+export async function fetchAttemptFeedback(attemptId: string) {
+  return supabase
+    .from('attempt_feedback')
+    .select('id, attempt_id, created_by, feedback, created_at')
+    .eq('attempt_id', attemptId)
+    .maybeSingle();
+}
+
+export async function saveAttemptFeedback(input: {
+  attemptId: string;
+  createdBy: string;
+  feedback: Record<string, unknown>;
+}) {
+  return supabase
+    .from('attempt_feedback')
+    .upsert(
+      { attempt_id: input.attemptId, created_by: input.createdBy, feedback: input.feedback },
+      { onConflict: 'attempt_id' }
+    )
+    .select('id, attempt_id, created_by, feedback, created_at')
+    .single();
 }

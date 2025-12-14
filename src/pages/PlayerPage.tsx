@@ -19,7 +19,11 @@ export function PlayerPage({ onSignOut }: PlayerPageProps) {
     if (error) {
       setPublishedError('Unable to load published simulations.');
     } else {
-      setPublishedSimulations(data ?? []);
+      const normalized = (data ?? []).map((row) => {
+        const simulation = Array.isArray(row.simulations) ? row.simulations[0] : row.simulations;
+        return { ...row, simulations: simulation } as PublishedSimulationVersion;
+      });
+      setPublishedSimulations(normalized);
     }
     setLoadingPublished(false);
   };

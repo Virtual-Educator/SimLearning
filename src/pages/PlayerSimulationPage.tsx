@@ -268,6 +268,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
       return;
     }
 
+    const simulationMeta = Array.isArray(data.simulations) ? data.simulations[0] : data.simulations;
     const manifestJson = data.manifest as Partial<SimulationManifest> | null;
 
     if (!manifestJson || typeof manifestJson !== 'object') {
@@ -291,8 +292,8 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     const resolvedManifest: SimulationManifest = {
       id: manifestJson.id ?? data.simulation_id,
       version: manifestJson.version ?? data.version,
-      title: manifestJson.title ?? data.simulations?.title ?? 'Simulation',
-      description: manifestJson.description ?? data.simulations?.description ?? '',
+      title: manifestJson.title ?? simulationMeta?.title ?? 'Simulation',
+      description: manifestJson.description ?? simulationMeta?.description ?? '',
       scene: manifestJson.scene,
       task:
         manifestJson.task ?? {
@@ -303,7 +304,7 @@ export function PlayerSimulationPage({ onSignOut }: PlayerSimulationPageProps) {
     };
 
     setManifest(resolvedManifest);
-    setSimulationMeta(data.simulations ?? null);
+    setSimulationMeta(simulationMeta ?? null);
     setShowGrid(false);
     setPinMode(false);
     setPins([]);

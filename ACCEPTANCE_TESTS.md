@@ -64,3 +64,7 @@
     - Saving a draft upserts the primary response text (with both `response_text` and `response_json` fields), stores new interaction events (grid toggles, pins, panel collapse) since the previous save, and shows a "Draft saved" confirmation with the updated timestamp. The save control can be clicked repeatedly without duplicate key errors.
     - Submitting an attempt updates the attempt to `submitted`, records the submission time, and disables editing controls (response input, save/submit buttons, pins, and grid toggles) for that attempt.
     - Downloading an attempt retrieves the attempt record plus its responses and events for the current attempt_id and saves them as `attempt.json` from the player UI using the new attempt schema fields.
+12. **Instructor review flow**
+    - `/instructor` lists submitted attempts with simulation title, version, student identifier, and submission timestamp, plus refresh/error/empty states. Each row links to `/instructor/attempts/:attemptId`.
+    - The attempt detail page displays the primary `attempt_responses` text for `response_key='primary'`, the ordered `attempt_events`, and a feedback textarea.
+    - Clicking "Save feedback" stores JSON feedback in `attempt_feedback` with the attempt id and the authenticated instructor's user id.
