@@ -21,6 +21,19 @@ export type SimulationVersion = {
   published_at?: string | null;
 };
 
+export type StudentAssignedSimulation = {
+  course_id: string;
+  course_code: string;
+  course_title: string | null;
+  simulation_id: string;
+  simulation_slug: string;
+  simulation_title: string;
+  simulation_description: string | null;
+  version_id: string;
+  version: string;
+  manifest: unknown;
+};
+
 export type SimulationWithVersions = Simulation & {
   simulation_versions: SimulationVersion[];
 };
@@ -274,6 +287,124 @@ export async function fetchPublishedSimulationVersionBySimulationId(simulationId
     .order('published_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+}
+
+export async function getStudentAssignedSimulations() {
+  const { data: userData } = await supabase.auth.getUser();
+  const studentId = userData?.user?.id;
+
+  if (!studentId) {
+    return { data: [], error: null };
+  }
+
+  const { data: enrollmentRows, error: enrollmentError } = await supabase
+    .from('course_enrollments')
+    .select(
+      `course_id,
+       courses (
+         id,
+         course_code,
+         title,
+         course_simulations (
+           simulation_id,
+           pinned_version_id,
+           simulations (id, slug, title, description),
+           pinned_version:simulation_versions!course_simulations_pinned_version_id_fkey (id, version, manifest, published_at, created_at)
+         )
+       )`
+    )
+    .eq('student_id', studentId);
+
+  if (enrollmentError) {
+    return { data: null, error: enrollmentError };
+  }
+
+  const courseSimulationRows: {
+    courseId: string;
+    courseCode: string;
+    courseTitle: string | null;
+    courseSimulation: any;
+  }[] = [];
+  const simulationsNeedingLatest = new Set<string>();
+
+  (enrollmentRows ?? []).forEach((row) => {
+    const course = Array.isArray(row.courses) ? row.courses[0] : row.courses;
+    const courseId = course?.id ?? row.course_id;
+    const courseCode = course?.course_code ?? '';
+    const courseTitle = course?.title ?? null;
+    const courseSimulations = course?.course_simulations ?? [];
+    const normalizedCourseSimulations = Array.isArray(courseSimulations)
+      ? courseSimulations
+      : [courseSimulations];
+
+    normalizedCourseSimulations.forEach((courseSimulation) => {
+      if (!courseSimulation) return;
+
+      courseSimulationRows.push({
+        courseId,
+        courseCode,
+        courseTitle,
+        courseSimulation,
+      });
+
+      if (!courseSimulation.pinned_version_id) {
+        simulationsNeedingLatest.add(courseSimulation.simulation_id);
+      }
+    });
+  });
+
+  const latestPublishedVersions: Record<string, { id: string; version: string; manifest: unknown }> = {};
+
+  if (simulationsNeedingLatest.size > 0) {
+    const { data: versionRows, error: versionError } = await supabase
+      .from('simulation_versions')
+      .select('id, simulation_id, version, manifest, published_at, created_at')
+      .eq('status', 'published')
+      .in('simulation_id', Array.from(simulationsNeedingLatest))
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
+
+    if (versionError) {
+      return { data: null, error: versionError };
+    }
+
+    (versionRows ?? []).forEach((version) => {
+      if (!latestPublishedVersions[version.simulation_id]) {
+        latestPublishedVersions[version.simulation_id] = {
+          id: version.id,
+          version: version.version,
+          manifest: version.manifest,
+        };
+      }
+    });
+  }
+
+  const assignments: StudentAssignedSimulation[] = courseSimulationRows
+    .map(({ courseId, courseCode, courseTitle, courseSimulation }) => {
+      const simulationRaw = courseSimulation.simulations;
+      const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
+      const pinnedVersionRaw = courseSimulation.pinned_version;
+      const pinnedVersion = Array.isArray(pinnedVersionRaw) ? pinnedVersionRaw[0] : pinnedVersionRaw;
+      const resolvedVersion = pinnedVersion ?? latestPublishedVersions[courseSimulation.simulation_id];
+
+      if (!simulation || !resolvedVersion) return null;
+
+      return {
+        course_id: courseId,
+        course_code: courseCode,
+        course_title: courseTitle,
+        simulation_id: simulation.id,
+        simulation_slug: simulation.slug,
+        simulation_title: simulation.title,
+        simulation_description: simulation.description ?? null,
+        version_id: resolvedVersion.id,
+        version: resolvedVersion.version,
+        manifest: resolvedVersion.manifest,
+      } satisfies StudentAssignedSimulation;
+    })
+    .filter(Boolean) as StudentAssignedSimulation[];
+
+  return { data: assignments, error: null };
 }
 
 export async function fetchSubmittedAttempts() {

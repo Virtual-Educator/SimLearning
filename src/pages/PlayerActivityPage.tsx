@@ -60,8 +60,7 @@ type AttemptEventRow = {
 
 interface ActivityMeta {
   title: string;
-  offering_code: string;
-  course_title: string;
+  course_label: string;
   simulation_title: string;
   version: string;
 }
@@ -272,9 +271,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     const { data, error: fetchError } = await supabase
       .from('activities')
       .select(
-        `id, title, opens_at, due_at, allow_resubmissions, max_submissions,
-         course_offerings (offering_code, courses (course_code, title)),
-         simulation_versions (id, version, status, manifest, simulations (id, title, description))`
+        'id, title, simulation_id, simulation_slug, simulation_title, simulation_description, simulation_version_id, simulation_version, manifest, course_code, course_term'
       )
       .eq('id', activityId)
       .maybeSingle();
@@ -297,20 +294,25 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
       return;
     }
 
-    const offeringRaw = data.course_offerings;
-    const offering = (Array.isArray(offeringRaw) ? offeringRaw[0] : offeringRaw) as
-      | { offering_code?: string; courses?: { course_code?: string; title?: string } | { course_code?: string; title?: string }[] }
-      | null;
-    const courseRaw = offering?.courses;
-    const course = Array.isArray(courseRaw) ? courseRaw[0] : courseRaw;
-    const simVersionRaw = data.simulation_versions;
-    const simVersion = (Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw) as
-      | { id: string; version: string; status: string; manifest: any; simulations?: { id?: string; title?: string; description?: string } | { id?: string; title?: string; description?: string }[] }
-      | null;
-    const simulationRaw = simVersion?.simulations;
-    const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
+    const simulation = data.simulation_title
+      ? { id: data.simulation_id, title: data.simulation_title, description: data.simulation_description ?? '' }
+      : null;
+    const simVersion = {
+      id: data.simulation_version_id,
+      version: data.simulation_version ?? '—',
+      manifest: data.manifest,
+    };
 
-    if (!simVersion?.manifest || typeof simVersion.manifest !== 'object') {
+    if (!simVersion.id) {
+      setError('Simulation version not available for this activity.');
+      setManifest(null);
+      setActivityMeta(null);
+      setIsLoading(false);
+      setLoadingActivity(false);
+      return;
+    }
+
+    if (!simVersion.manifest || typeof simVersion.manifest !== 'object') {
       setError('Published manifest is invalid.');
       setManifest(null);
       setActivityMeta(null);
@@ -350,8 +352,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     setManifest(resolvedManifest);
     setActivityMeta({
       title: data.title,
-      offering_code: offering?.offering_code ?? '—',
-      course_title: course?.title ?? course?.course_code ?? 'Course',
+      course_label: data.course_term ?? data.course_code ?? 'Course',
       simulation_title: simulation?.title ?? 'Simulation',
       version: simVersion.version,
     });
@@ -564,7 +565,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
   };
 
   const resolvedTitle = activityMeta?.title ?? 'SimLearning Player';
-  const resolvedDescription = activityMeta?.course_title ?? 'Load and run interactive simulations.';
+  const resolvedDescription = activityMeta?.course_label ?? 'Load and run interactive simulations.';
   const toggleButtonLabel = `${isPanelCollapsed ? 'Expand' : 'Collapse'} utility panel (${TOGGLE_SHORTCUT})`;
   const canSaveDraft = Boolean(attemptId) && !attemptLocked && !savingDraft && !combinedLoading && !submitting && !error;
   const canSubmitAttempt =
@@ -587,16 +588,14 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
             <div>
               <p style={{ margin: '0 0 6px' }}>
                 <Link to="/player" style={{ color: '#0ea5e9', fontWeight: 600, textDecoration: 'none' }}>
-                  ← Back to activities
+                  ← Back to simulations
                 </Link>
               </p>
               <h2 style={{ margin: 0 }}>Activity</h2>
               <p style={{ margin: '4px 0', color: '#475569' }}>
                 {activityMeta?.simulation_title ? `${activityMeta.simulation_title} (v${activityMeta.version})` : 'Loading…'}
               </p>
-              <p style={{ margin: '4px 0', color: '#475569' }}>
-                {activityMeta?.offering_code ? `Offering ${activityMeta.offering_code}` : ''}
-              </p>
+              <p style={{ margin: '4px 0', color: '#475569' }}>{activityMeta?.course_label ?? ''}</p>
               {attemptNo !== null && (
                 <p style={{ margin: '4px 0', color: '#0f172a', fontWeight: 600 }}>Attempt #{attemptNo}</p>
               )}
