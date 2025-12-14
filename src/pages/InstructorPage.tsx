@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchSubmittedAttempts, type AttemptWithActivity } from '../lib/api';
+import { fetchSubmittedAttempts, type AttemptWithSimulation } from '../lib/api';
 
 interface InstructorPageProps {
   onSignOut: () => Promise<void>;
 }
 
 export function InstructorPage({ onSignOut }: InstructorPageProps) {
-  const [attempts, setAttempts] = useState<AttemptWithActivity[]>([]);
+  const [attempts, setAttempts] = useState<AttemptWithSimulation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,30 +23,15 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
       setError('Unable to load submitted attempts.');
     } else {
       const normalizedAttempts = (data ?? []).map((row) => {
-        const activity = Array.isArray(row.activities) ? row.activities[0] : row.activities;
-        const simVersionRaw = activity?.simulation_versions;
-        const simVersion = (Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw) as any;
-        const simulationRaw = simVersion?.simulations;
-        const simulation = (Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw) as any;
+        const simVersionRaw = row.simulation_versions as unknown;
+        const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
+        const simulationRaw = (simVersion as any)?.simulations;
+        const simulation = Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw;
 
         return {
-          id: row.id,
-          attempt_no: row.attempt_no,
-          submitted_at: row.submitted_at,
-          student_id: row.student_id,
-          activities: activity
-            ? {
-                id: activity.id,
-                title: activity.title,
-                simulation_versions: simVersion
-                  ? {
-                      version: simVersion.version,
-                      simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
-                    }
-                  : null,
-              }
-            : null,
-        } satisfies AttemptWithActivity;
+          ...row,
+          simulation_versions: simVersion ? { ...(simVersion as any), simulations: simulation ?? null } : null,
+        } as AttemptWithSimulation;
       });
 
       setAttempts(normalizedAttempts);
@@ -85,8 +70,8 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
-                    <th style={{ padding: '8px 6px' }}>Activity</th>
                     <th style={{ padding: '8px 6px' }}>Simulation</th>
+                    <th style={{ padding: '8px 6px' }}>Version</th>
                     <th style={{ padding: '8px 6px' }}>Attempt</th>
                     <th style={{ padding: '8px 6px' }}>Student</th>
                     <th style={{ padding: '8px 6px' }}>Submitted</th>
@@ -100,14 +85,17 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                           to={`/instructor/attempts/${attempt.id}`}
                           style={{ color: '#0ea5e9', fontWeight: 600 }}
                         >
-                          {attempt.activities?.title ?? 'Unknown activity'}
+                          {attempt.simulation_versions?.simulations?.title ?? 'Unknown simulation'}
                         </Link>
+                        <div style={{ color: '#475569', fontSize: 13 }}>
+                          {attempt.simulation_versions?.simulations?.slug ?? 'Unknown slug'}
+                        </div>
                       </td>
                       <td style={{ padding: '10px 6px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <strong>{attempt.activities?.simulation_versions?.simulations?.title ?? 'Unknown simulation'}</strong>
+                          <strong>Version {attempt.simulation_versions?.version ?? '—'}</strong>
                           <span style={{ color: '#475569', fontSize: 13 }}>
-                            Version {attempt.activities?.simulation_versions?.version ?? '—'}
+                            Simulation ID {attempt.simulation_version_id ?? '—'}
                           </span>
                         </div>
                       </td>

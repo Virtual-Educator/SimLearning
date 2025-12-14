@@ -63,16 +63,16 @@ export type Activity = {
   simulation_versions?: (SimulationVersion & { simulations?: Simulation | null }) | null;
 };
 
-export type AttemptWithActivity = {
+export type AttemptWithSimulation = {
   id: string;
   attempt_no: number;
+  status: string;
   submitted_at: string | null;
   student_id: string;
-  activities: Pick<Activity, 'id' | 'title'> & {
-    simulation_versions: (Pick<SimulationVersion, 'version'> & {
-      simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
-    }) | null;
-  } | null;
+  simulation_version_id: string;
+  simulation_versions: (Pick<SimulationVersion, 'id' | 'simulation_id' | 'version' | 'manifest'> & {
+    simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
+  }) | null;
 };
 
 export type AttemptDetail = {
@@ -81,11 +81,10 @@ export type AttemptDetail = {
   status: string;
   attempt_no: number;
   submitted_at: string | null;
-  activities: Pick<Activity, 'id' | 'title'> & {
-    simulation_versions: (Pick<SimulationVersion, 'version'> & {
-      simulations?: Pick<Simulation, 'id' | 'title'> | null;
-    }) | null;
-  } | null;
+  simulation_version_id: string;
+  simulation_versions: (Pick<SimulationVersion, 'id' | 'simulation_id' | 'version' | 'manifest'> & {
+    simulations?: Pick<Simulation, 'id' | 'title' | 'slug'> | null;
+  }) | null;
 };
 
 export type AttemptResponseRow = {
@@ -348,10 +347,10 @@ export async function fetchSubmittedAttempts() {
   return supabase
     .from('attempts')
     .select(
-      `id, attempt_no, submitted_at, student_id,
-       activities (
-         id, title,
-         simulation_versions (version, simulations (id, title, slug))
+      `id, attempt_no, status, submitted_at, student_id, simulation_version_id,
+       simulation_versions (
+         id, simulation_id, version, manifest,
+         simulations (id, title, slug)
        )`
     )
     .eq('status', 'submitted')
@@ -362,10 +361,10 @@ export async function fetchAttemptDetail(attemptId: string) {
   return supabase
     .from('attempts')
     .select(
-      `id, student_id, status, attempt_no, submitted_at,
-       activities (
-         id, title,
-         simulation_versions (version, simulations (id, title))
+      `id, student_id, status, attempt_no, submitted_at, simulation_version_id,
+       simulation_versions (
+         id, simulation_id, version, manifest,
+         simulations (id, title, slug)
        )`
     )
     .eq('id', attemptId)
