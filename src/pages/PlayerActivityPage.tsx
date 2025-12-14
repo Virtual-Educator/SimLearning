@@ -63,6 +63,7 @@ interface ActivityMeta {
   course_label: string;
   simulation_title: string;
   version: string;
+  course_id?: string | null;
 }
 
 function getStoredPanelState() {
@@ -138,7 +139,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     return () => window.removeEventListener('keydown', handleKeydown);
   }, []);
 
-  const initializeAttempt = async (simulationVersionId: string) => {
+  const initializeAttempt = async (simulationVersionId: string, courseId?: string | null) => {
     if (!session?.user) {
       setError('You must be signed in to start an attempt.');
       setAttemptLoading(false);
@@ -183,6 +184,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
         .insert({
           student_id: session.user.id,
           activity_id: activityId,
+          course_id: courseId ?? null,
           simulation_version_id: simulationVersionId,
           status: 'draft',
           attempt_no: nextAttemptNo as number,
@@ -271,7 +273,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     const { data, error: fetchError } = await supabase
       .from('activities')
       .select(
-        'id, title, simulation_id, simulation_slug, simulation_title, simulation_description, simulation_version_id, simulation_version, manifest'
+        'id, title, course_id, course_code, course_title, simulation_id, simulation_slug, simulation_title, simulation_description, simulation_version_id, simulation_version, manifest'
       )
       .eq('id', activityId)
       .maybeSingle();
@@ -350,16 +352,21 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     };
 
     setManifest(resolvedManifest);
+    const courseLabel = data.course_code
+      ? `${data.course_code}${data.course_title ? ` — ${data.course_title}` : ''}`
+      : 'Course';
+
     setActivityMeta({
       title: data.title,
-      course_label: 'Course',
+      course_label: courseLabel,
       simulation_title: simulation?.title ?? 'Simulation',
       version: simVersion.version,
+      course_id: data.course_id ?? null,
     });
     setShowGrid(false);
     setPinMode(false);
     setPins([]);
-    await initializeAttempt(simVersion.id);
+    await initializeAttempt(simVersion.id, data.course_id ?? null);
     setIsLoading(false);
     setLoadingActivity(false);
   };

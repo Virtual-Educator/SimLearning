@@ -1,52 +1,64 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchSubmittedAttempts, type AttemptWithActivity } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { fetchSubmittedAttempts, type AttemptWithCourse } from '../lib/api';
 
 interface InstructorPageProps {
   onSignOut: () => Promise<void>;
 }
 
 export function InstructorPage({ onSignOut }: InstructorPageProps) {
-  const [attempts, setAttempts] = useState<AttemptWithActivity[]>([]);
+  const { session } = useAuth();
+  const [attempts, setAttempts] = useState<AttemptWithCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAttempts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   async function loadAttempts() {
+    if (!session?.user) {
+      setError('You must be signed in to view submissions.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await fetchSubmittedAttempts();
+    const { data, error: fetchError } = await fetchSubmittedAttempts(session.user.id);
     if (fetchError) {
       setError('Unable to load submitted attempts.');
     } else {
       const normalizedAttempts = (data ?? []).map((row) => {
-        const activity = Array.isArray(row.activities) ? row.activities[0] : row.activities;
-        const simVersionRaw = activity?.simulation_versions;
-        const simVersion = (Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw) as any;
+        const simVersionRaw = row.simulation_versions;
+        const simVersion = Array.isArray(simVersionRaw) ? simVersionRaw[0] : simVersionRaw;
         const simulationRaw = simVersion?.simulations;
         const simulation = (Array.isArray(simulationRaw) ? simulationRaw[0] : simulationRaw) as any;
+        const courseRaw = row.course;
+        const course = (Array.isArray(courseRaw) ? courseRaw[0] : courseRaw) as any;
 
         return {
           id: row.id,
           attempt_no: row.attempt_no,
           submitted_at: row.submitted_at,
+          status: row.status,
           student_id: row.student_id,
-          activities: activity
+          course: course
             ? {
-                id: activity.id,
-                title: activity.title,
-                simulation_versions: simVersion
-                  ? {
-                      version: simVersion.version,
-                      simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
-                    }
-                  : null,
+                id: course.id,
+                code: course.code,
+                title: course.title,
               }
             : null,
-        } satisfies AttemptWithActivity;
+          simulation_versions: simVersion
+            ? {
+                version: simVersion.version,
+                simulations: Array.isArray(simulation) ? simulation[0] : simulation ?? null,
+              }
+            : null,
+        } satisfies AttemptWithCourse;
       });
 
       setAttempts(normalizedAttempts);
@@ -85,9 +97,10 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
-                    <th style={{ padding: '8px 6px' }}>Activity</th>
+                    <th style={{ padding: '8px 6px' }}>Course</th>
                     <th style={{ padding: '8px 6px' }}>Simulation</th>
                     <th style={{ padding: '8px 6px' }}>Attempt</th>
+                    <th style={{ padding: '8px 6px' }}>Status</th>
                     <th style={{ padding: '8px 6px' }}>Student</th>
                     <th style={{ padding: '8px 6px' }}>Submitted</th>
                   </tr>
@@ -96,22 +109,28 @@ export function InstructorPage({ onSignOut }: InstructorPageProps) {
                   {attempts.map((attempt) => (
                     <tr key={attempt.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '10px 6px' }}>
-                        <Link
-                          to={`/instructor/attempts/${attempt.id}`}
-                          style={{ color: '#0ea5e9', fontWeight: 600 }}
-                        >
-                          {attempt.activities?.title ?? 'Unknown activity'}
-                        </Link>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <strong>{attempt.course?.code ?? 'Course'}</strong>
+                          <span style={{ color: '#475569', fontSize: 13 }}>
+                            {attempt.course?.title ?? '—'}
+                          </span>
+                        </div>
                       </td>
                       <td style={{ padding: '10px 6px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <strong>{attempt.activities?.simulation_versions?.simulations?.title ?? 'Unknown simulation'}</strong>
+                          <Link
+                            to={`/instructor/attempts/${attempt.id}`}
+                            style={{ color: '#0ea5e9', fontWeight: 600, textDecoration: 'none' }}
+                          >
+                            {attempt.simulation_versions?.simulations?.title ?? 'Unknown simulation'}
+                          </Link>
                           <span style={{ color: '#475569', fontSize: 13 }}>
-                            Version {attempt.activities?.simulation_versions?.version ?? '—'}
+                            Version {attempt.simulation_versions?.version ?? '—'}
                           </span>
                         </div>
                       </td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>#{attempt.attempt_no}</td>
+                      <td style={{ padding: '10px 6px', color: '#475569' }}>{attempt.status}</td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>{attempt.student_id}</td>
                       <td style={{ padding: '10px 6px', color: '#475569' }}>
                         {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : '—'}
