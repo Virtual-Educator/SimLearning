@@ -6,6 +6,7 @@ import { InstructorPage } from './pages/InstructorPage';
 import { AdminPage } from './pages/AdminPage';
 import { AdminSimulationDetailPage } from './pages/AdminSimulationDetailPage';
 import { PlayerSimulationPage } from './pages/PlayerSimulationPage';
+import { InstructorAttemptReviewPage } from './pages/InstructorAttemptReviewPage';
 import { AuthProvider, useAuth, type UserRole } from './context/AuthContext';
 import { landingPathForRole } from './lib/routing';
 
@@ -108,6 +109,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['instructor', 'admin']}>
               <InstructorPage onSignOut={handleSignOut} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/instructor/attempts/:attemptId"
+          element={
+            <ProtectedRoute allowedRoles={['instructor', 'admin']}>
+              <InstructorAttemptReviewPage />
             </ProtectedRoute>
           }
         />
