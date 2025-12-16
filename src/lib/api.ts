@@ -17,6 +17,7 @@ export type SimulationVersion = {
   version: string;
   status: SimulationVersionStatus;
   manifest: unknown;
+  package_path?: string | null;
   created_at?: string;
   published_at?: string | null;
 };
