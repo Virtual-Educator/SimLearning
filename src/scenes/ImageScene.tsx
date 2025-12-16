@@ -12,6 +12,8 @@ type ImageSceneProps = {
   pins: PinLocation[];
   onAddPin: (pin: { x: number; y: number }) => void;
   onRemovePin: (id: number) => void;
+  onImageError?: () => void;
+  onImageLoad?: () => void;
 };
 
 const GRID_COLUMNS = ['A', 'B', 'C', 'D', 'E'];
@@ -29,6 +31,8 @@ export function ImageScene({
   pins,
   onAddPin,
   onRemovePin,
+  onImageError,
+  onImageLoad,
 }: ImageSceneProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -162,7 +166,14 @@ export function ImageScene({
           className="scene-media"
           style={{ transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})` }}
         >
-          <img ref={imageRef} src={imageSrc} alt={alt} draggable={false} />
+          <img
+            ref={imageRef}
+            src={imageSrc}
+            alt={alt}
+            draggable={false}
+            onError={onImageError}
+            onLoad={onImageLoad}
+          />
           {gridOverlay}
           {hasPins && (
             <div className="pins-layer" aria-label="Placed pins">
