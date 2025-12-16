@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import ImageScene from '../scenes/ImageScene';
 import { BottomActionBar } from '../components/BottomActionBar';
@@ -8,6 +8,7 @@ import { UtilityPanel, UtilityTab } from '../components/UtilityPanel';
 import { getAttemptEvents, getAttemptEventsSince, logEvent, resetAttemptEvents } from '../sim/attempt';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { resolveSceneImageUrl } from '../lib/sceneUrl';
 
 const PANEL_STORAGE_KEY = 'simlearning-utility-collapsed';
 const TOGGLE_SHORTCUT = 'Ctrl+Shift+U';
@@ -19,7 +20,9 @@ export type SimulationManifest = {
   description: string;
   scene: {
     type: 'image';
-    src: string;
+    src?: string;
+    image_path?: string;
+    storage?: { bucket: string; path: string };
     alt?: string;
   };
   task: {
@@ -102,12 +105,34 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
   const [loadedEvents, setLoadedEvents] = useState<AttemptEventRow[]>([]);
   const [eventCursor, setEventCursor] = useState(0);
   const [downloadInProgress, setDownloadInProgress] = useState(false);
+  const [sceneImageSrc, setSceneImageSrc] = useState('');
+  const [sceneLoading, setSceneLoading] = useState(false);
+  const [sceneRetryAttempted, setSceneRetryAttempted] = useState(false);
+  const [sceneError, setSceneError] = useState<string | null>(null);
+  const [sceneSource, setSceneSource] = useState<'storage' | 'public' | null>(null);
 
-  const sceneImageSrc = useMemo(() => {
-    if (!manifest) return '';
-    const basePath = `/simulations/${manifest.id}/`;
-    return `${basePath}${manifest.scene.src.replace(/^\/+/, '')}`;
-  }, [manifest]);
+  const loadSceneImage = useCallback(
+    async (targetManifest: SimulationManifest) => {
+      setSceneLoading(true);
+      setSceneError(null);
+      try {
+        const resolved = await resolveSceneImageUrl(targetManifest);
+        if (!resolved) {
+          throw new Error('Scene image path is missing.');
+        }
+        setSceneImageSrc(resolved.url);
+        setSceneSource(resolved.source);
+        setSceneRetryAttempted(false);
+      } catch (sceneErr) {
+        const message = sceneErr instanceof Error ? sceneErr.message : 'Unable to load scene image.';
+        setSceneError(message);
+        setSceneImageSrc('');
+      } finally {
+        setSceneLoading(false);
+      }
+    },
+    []
+  );
 
   const togglePanelCollapse = () => {
     setIsPanelCollapsed((prev) => {
@@ -117,10 +142,42 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     });
   };
 
+  const handleSceneImageError = async () => {
+    if (!manifest) return;
+
+    if (sceneSource === 'storage' && !sceneRetryAttempted) {
+      try {
+        const response = await fetch(sceneImageSrc, { method: 'HEAD' });
+        if (response.status === 403) {
+          setSceneRetryAttempted(true);
+          await loadSceneImage(manifest);
+          return;
+        }
+      } catch (headError) {
+        console.error('Unable to verify scene image status', headError);
+        setSceneRetryAttempted(true);
+        await loadSceneImage(manifest);
+        return;
+      }
+    }
+
+    const message = 'Unable to load scene image. Please refresh the page.';
+    setSceneError(message);
+  };
+
+  const handleSceneImageLoad = () => {
+    setSceneError(null);
+  };
+
   useEffect(() => {
     loadActivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activityId, attemptIdParam]);
+
+  useEffect(() => {
+    if (!manifest) return;
+    loadSceneImage(manifest);
+  }, [loadSceneImage, manifest]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -263,6 +320,10 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     resetAttemptEvents();
     setEventCursor(0);
     setAttemptLoading(true);
+    setSceneImageSrc('');
+    setSceneError(null);
+    setSceneRetryAttempted(false);
+    setSceneSource(null);
 
     if (!activityId && !attemptIdParam) {
       setError('An activity or attempt id is required.');
@@ -321,12 +382,11 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
         return;
       }
 
-      if (
-        !simVersion.manifest.scene ||
-        typeof simVersion.manifest.scene !== 'object' ||
-        simVersion.manifest.scene.type !== 'image' ||
-        !simVersion.manifest.scene.src
-      ) {
+      const scene = simVersion.manifest.scene as SimulationManifest['scene'] | undefined;
+      const hasStorage = Boolean(scene?.storage?.bucket && scene.storage?.path);
+      const hasSrc = Boolean(scene?.src || scene?.image_path);
+
+      if (!scene || typeof scene !== 'object' || scene.type !== 'image' || (!hasSrc && !hasStorage)) {
         setError('Published manifest is missing a valid image scene.');
         setManifest(null);
         setActivityMeta(null);
@@ -458,12 +518,11 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
       return;
     }
 
-    if (
-      !simVersion.manifest.scene ||
-      typeof simVersion.manifest.scene !== 'object' ||
-      simVersion.manifest.scene.type !== 'image' ||
-      !simVersion.manifest.scene.src
-    ) {
+    const scene = simVersion.manifest.scene as SimulationManifest['scene'] | undefined;
+    const hasStorage = Boolean(scene?.storage?.bucket && scene.storage?.path);
+    const hasSrc = Boolean(scene?.src || scene?.image_path);
+
+    if (!scene || typeof scene !== 'object' || scene.type !== 'image' || (!hasSrc && !hasStorage)) {
       setError('Published manifest is missing a valid image scene.');
       setManifest(null);
       setActivityMeta(null);
@@ -509,8 +568,9 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
   const gridAllowed = Boolean(manifest?.tools?.grid);
   const pinsAllowed = Boolean(manifest?.tools?.pins);
   const attemptLocked = attemptStatus === 'submitted';
-  const combinedLoading = isLoading || attemptLoading;
-  const controlsDisabled = combinedLoading || attemptLocked || Boolean(error) || submitting;
+  const activeError = error ?? sceneError;
+  const combinedLoading = isLoading || attemptLoading || sceneLoading;
+  const controlsDisabled = combinedLoading || attemptLocked || Boolean(activeError) || submitting;
 
   const handleGridToggle = () => {
     if (!gridAllowed || controlsDisabled) return;
@@ -709,10 +769,17 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
   const resolvedTitle = activityMeta?.title ?? 'SimLearning Player';
   const resolvedDescription = activityMeta?.course_label ?? 'Load and run interactive simulations.';
   const toggleButtonLabel = `${isPanelCollapsed ? 'Expand' : 'Collapse'} utility panel (${TOGGLE_SHORTCUT})`;
-  const canSaveDraft = Boolean(attemptId) && !attemptLocked && !savingDraft && !combinedLoading && !submitting && !error;
+  const canSaveDraft =
+    Boolean(attemptId) && !attemptLocked && !savingDraft && !combinedLoading && !submitting && !activeError;
   const canSubmitAttempt =
-    Boolean(attemptId) && attemptStatus === 'draft' && !submitting && !combinedLoading && !savingDraft && !error;
-  const canDownloadAttempt = Boolean(attemptId) && !attemptLoading && !downloadInProgress && !combinedLoading && !error;
+    Boolean(attemptId) &&
+    attemptStatus === 'draft' &&
+    !submitting &&
+    !combinedLoading &&
+    !savingDraft &&
+    !activeError;
+  const canDownloadAttempt =
+    Boolean(attemptId) && !attemptLoading && !downloadInProgress && !combinedLoading && !activeError;
 
   return (
     <div className="app-shell">
@@ -747,14 +814,14 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
             </button>
           </div>
           {loadingActivity && <p>Loading activity…</p>}
-          {error && <div className="form__error">{error}</div>}
-          {!loadingActivity && !error && !manifest && <p>No published manifest found for this activity.</p>}
+          {activeError && <div className="form__error">{activeError}</div>}
+          {!loadingActivity && !activeError && !manifest && <p>No published manifest found for this activity.</p>}
         </div>
       </section>
 
       <main className={`workspace ${isPanelCollapsed ? 'workspace--panel-collapsed' : ''}`}>
-        <SceneFrame isLoading={combinedLoading} error={error}>
-          {!combinedLoading && !error && manifest && (
+        <SceneFrame isLoading={combinedLoading} error={activeError}>
+          {!combinedLoading && !activeError && manifest && (
             <ImageScene
               imageSrc={sceneImageSrc}
               alt={manifest.scene.alt || manifest.title}
@@ -764,6 +831,8 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
               pins={pins}
               onAddPin={handleAddPin}
               onRemovePin={handleRemovePin}
+              onImageError={handleSceneImageError}
+              onImageLoad={handleSceneImageLoad}
             />
           )}
         </SceneFrame>
@@ -774,7 +843,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           isLoading={combinedLoading}
-          error={error}
+          error={activeError}
           task={manifest?.task ?? null}
           gridAllowed={gridAllowed}
           pinsAllowed={pinsAllowed}
