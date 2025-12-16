@@ -23,6 +23,7 @@ export type SimulationManifest = {
     src?: string;
     image_path?: string;
     storage?: { bucket: string; path: string };
+    entry?: string;
     alt?: string;
   };
   task: {
@@ -83,6 +84,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
   const { activityId, attemptId: attemptIdParam } = useParams<{ activityId?: string; attemptId?: string }>();
   const { session } = useAuth();
   const [manifest, setManifest] = useState<SimulationManifest | null>(null);
+  const [packagePath, setPackagePath] = useState<string | null>(null);
   const [activityMeta, setActivityMeta] = useState<ActivityMeta | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,11 +114,11 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
   const [sceneSource, setSceneSource] = useState<'storage' | 'public' | null>(null);
 
   const loadSceneImage = useCallback(
-    async (targetManifest: SimulationManifest) => {
+    async (targetManifest: SimulationManifest, targetPackagePath?: string | null) => {
       setSceneLoading(true);
       setSceneError(null);
       try {
-        const resolved = await resolveSceneImageUrl(targetManifest);
+        const resolved = await resolveSceneImageUrl(targetManifest, targetPackagePath);
         if (!resolved) {
           throw new Error('Scene image path is missing.');
         }
@@ -150,13 +152,13 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
         const response = await fetch(sceneImageSrc, { method: 'HEAD' });
         if (response.status === 403) {
           setSceneRetryAttempted(true);
-          await loadSceneImage(manifest);
+          await loadSceneImage(manifest, packagePath);
           return;
         }
       } catch (headError) {
         console.error('Unable to verify scene image status', headError);
         setSceneRetryAttempted(true);
-        await loadSceneImage(manifest);
+        await loadSceneImage(manifest, packagePath);
         return;
       }
     }
@@ -176,8 +178,8 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
 
   useEffect(() => {
     if (!manifest) return;
-    loadSceneImage(manifest);
-  }, [loadSceneImage, manifest]);
+    loadSceneImage(manifest, packagePath);
+  }, [loadSceneImage, manifest, packagePath]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -324,6 +326,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     setSceneError(null);
     setSceneRetryAttempted(false);
     setSceneSource(null);
+    setPackagePath(null);
 
     if (!activityId && !attemptIdParam) {
       setError('An activity or attempt id is required.');
@@ -336,7 +339,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
       const { data: attemptRow, error: attemptError } = await supabase
         .from('attempts')
         .select(
-          `id, status, attempt_no, course_id, simulation_version_id, simulation_versions (id, version, manifest, simulations (id, title, description, slug))`
+          `id, status, attempt_no, course_id, simulation_version_id, simulation_versions (id, version, manifest, package_path, simulations (id, title, description, slug))`
         )
         .eq('id', attemptIdParam)
         .maybeSingle();
@@ -385,8 +388,9 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
       const scene = simVersion.manifest.scene as SimulationManifest['scene'] | undefined;
       const hasStorage = Boolean(scene?.storage?.bucket && scene.storage?.path);
       const hasSrc = Boolean(scene?.src || scene?.image_path);
+      const hasEntry = Boolean(scene?.entry);
 
-      if (!scene || typeof scene !== 'object' || scene.type !== 'image' || (!hasSrc && !hasStorage)) {
+      if (!scene || typeof scene !== 'object' || scene.type !== 'image' || (!hasSrc && !hasStorage && !hasEntry)) {
         setError('Published manifest is missing a valid image scene.');
         setManifest(null);
         setActivityMeta(null);
@@ -406,6 +410,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
       };
 
       setManifest(resolvedManifest);
+      setPackagePath(simVersion.package_path ?? null);
       const courseLabel = attemptRow.course_id ? `Course — ${attemptRow.course_id}` : 'Course';
       setActivityMeta({
         title: simulation?.title ?? 'Simulation',
@@ -468,7 +473,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     const { data, error: fetchError } = await supabase
       .from('activities')
       .select(
-        'id, title, course_id, course_code, course_title, simulation_id, simulation_slug, simulation_title, simulation_description, simulation_version_id, simulation_version, manifest'
+        'id, title, course_id, course_code, course_title, simulation_id, simulation_slug, simulation_title, simulation_description, simulation_version_id, simulation_version, manifest, package_path'
       )
       .eq('id', activityId)
       .maybeSingle();
@@ -498,6 +503,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
       id: data.simulation_version_id,
       version: data.simulation_version ?? '—',
       manifest: data.manifest,
+      package_path: data.package_path ?? null,
     };
 
     if (!simVersion.id) {
@@ -521,8 +527,9 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     const scene = simVersion.manifest.scene as SimulationManifest['scene'] | undefined;
     const hasStorage = Boolean(scene?.storage?.bucket && scene.storage?.path);
     const hasSrc = Boolean(scene?.src || scene?.image_path);
+    const hasEntry = Boolean(scene?.entry);
 
-    if (!scene || typeof scene !== 'object' || scene.type !== 'image' || (!hasSrc && !hasStorage)) {
+    if (!scene || typeof scene !== 'object' || scene.type !== 'image' || (!hasSrc && !hasStorage && !hasEntry)) {
       setError('Published manifest is missing a valid image scene.');
       setManifest(null);
       setActivityMeta(null);
@@ -546,6 +553,7 @@ export function PlayerActivityPage({ onSignOut }: PlayerActivityPageProps) {
     };
 
     setManifest(resolvedManifest);
+    setPackagePath(simVersion.package_path ?? null);
     const courseLabel = data.course_code
       ? `${data.course_code}${data.course_title ? ` — ${data.course_title}` : ''}`
       : 'Course';

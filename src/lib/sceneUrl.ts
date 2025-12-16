@@ -9,6 +9,7 @@ type SceneWithStorage = {
   type: string;
   src?: string;
   image_path?: string;
+  entry?: string;
   storage?: SceneStorageLocation;
 };
 
@@ -35,8 +36,34 @@ function resolvePublicPath(manifest: ManifestWithScene): string | null {
   return `${basePath}${publicSrc.replace(/^\/+/, '')}`;
 }
 
+function normalizePathSegment(value: string): string {
+  return value.replace(/^\/+|\/+$/g, '');
+}
+
+function resolvePackageEntryPath(scene: SceneWithStorage | undefined, packagePath?: string | null): string | null {
+  if (!scene?.entry || !packagePath) return null;
+
+  const normalizedPackage = normalizePathSegment(packagePath);
+  const normalizedEntry = normalizePathSegment(scene.entry);
+
+  if (!normalizedPackage || !normalizedEntry) return null;
+
+  return `${normalizedPackage}/${normalizedEntry}`;
+}
+
+async function createSignedUrl(bucket: string, path: string) {
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message ?? 'Unable to generate signed URL for scene image.');
+  }
+
+  return data.signedUrl;
+}
+
 export async function resolveSceneImageUrl(
-  manifest: unknown
+  manifest: unknown,
+  packagePath?: string | null
 ): Promise<{ url: string; source: 'storage' | 'public' } | null> {
   if (!isRecord(manifest)) return null;
 
@@ -44,13 +71,14 @@ export async function resolveSceneImageUrl(
   const scene = manifestWithScene.scene;
 
   if (hasStorageLocation(scene)) {
-    const { data, error } = await supabase.storage.from(scene.storage.bucket).createSignedUrl(scene.storage.path, 3600);
+    const signedUrl = await createSignedUrl(scene.storage.bucket, scene.storage.path);
+    return { url: signedUrl, source: 'storage' };
+  }
 
-    if (error || !data?.signedUrl) {
-      throw new Error(error?.message ?? 'Unable to generate signed URL for scene image.');
-    }
-
-    return { url: data.signedUrl, source: 'storage' };
+  const packageEntryPath = resolvePackageEntryPath(scene, packagePath);
+  if (packageEntryPath) {
+    const signedUrl = await createSignedUrl('simulations', packageEntryPath);
+    return { url: signedUrl, source: 'storage' };
   }
 
   const publicPath = resolvePublicPath(manifestWithScene);
